@@ -9,7 +9,7 @@ const SECTIONS = [
   {
     title: "Playback",
     description: "Audio quality and playback behavior.",
-    note: "Available once playback is implemented.",
+    note: "Player, queue, and playback history are live. Audio-quality options are deferred.",
   },
   {
     title: "Privacy & data",
@@ -40,7 +40,7 @@ export default function SettingsPage() {
         <div className="rounded-[var(--radius-card)] border border-rockstar-border bg-rockstar-surface p-5">
           <h3 className="text-sm font-semibold text-rockstar-text-primary">About</h3>
           <p className="mt-0.5 text-sm text-rockstar-text-secondary">Rockstar Music Player</p>
-          <p className="text-sm text-rockstar-text-secondary">Phase 1 &middot; v1.0.0</p>
+          <p className="text-sm text-rockstar-text-secondary">Phase 4 &middot; v1.0.0</p>
         </div>
       </div>
     </div>

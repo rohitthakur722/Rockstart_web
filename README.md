@@ -4,11 +4,12 @@ A full-stack, premium-feeling music player web application. Rockstar mirrors the
 look and feel of the Rockstar mobile app: dark, cinematic, minimal, and built
 around a warm tan/gold brand identity.
 
-This repository is being built in five phases. **This document reflects Phase 3**
-— there is now a real, working music catalog: authenticated uploads, admin
-moderation, search/filter/sort/pagination, and byte-range audio streaming.
-Actual in-browser playback (a persistent player, queue, play/pause UI) is
-still a later phase — Phase 3 catalogs and streams audio; it doesn't play it.
+This repository is being built in five phases. **This document reflects Phase
+4** — on top of Phase 3's catalog and streaming infrastructure, Rockstar now
+has a real, persistent in-browser player: a single global audio element with
+a queue, shuffle, repeat, seeking, volume, Media Session integration, and
+keyboard shortcuts, plus a personal library (liked songs, playlists),
+qualified-play listening history, and locally-derived recommendations.
 
 ## Technology Stack
 
@@ -44,27 +45,37 @@ still a later phase — Phase 3 catalogs and streams audio; it doesn't play it.
 RockStar/
 ├── backend/
 │   ├── config/          # env validation, PostgreSQL pool + transaction helper
-│   ├── controller/       # auth, user, health, song, artist, album, genre, catalog
-│   ├── service/          # business logic incl. song upload/streaming pipeline
-│   ├── model/             # raw parameterized SQL (user, refreshToken, song, artist, album, genre, ...)
+│   ├── controller/       # auth, user, health, song, artist, album, genre, catalog,
+│   │                     # like, playlist, playback, history, recommendation
+│   ├── service/          # business logic incl. song upload/streaming pipeline,
+│   │                     # playback-session lifecycle, recommendation ranking
+│   ├── model/             # raw parameterized SQL (user, refreshToken, song, artist, album, genre,
+│   │                       # like, playlist, playbackHistory, ...)
 │   ├── routes/            # Express routers (one per resource)
 │   ├── middleware/       # authenticate, optionalAuthenticate, authorize, error, upload-error
 │   ├── validation/        # small hand-written request validators
-│   ├── database/          # schema.sql, seed.sql, migrations/
+│   ├── database/          # schema.sql, seed.sql, migrations/ (incl. 003_player_personal_library.sql)
 │   ├── uploads/            # music/ (never served directly), covers/, profiles/
 │   ├── utils/              # AppError, pagination, rangeParser, catalogMapper,
-│   │                       # audioMetadata, fileSignature, mediaFiles, fileCleanup, uploadConfig
+│   │                       # audioMetadata, fileSignature, mediaFiles, fileCleanup, uploadConfig,
+│   │                       # playbackQualification, recommendationRanking
 │   ├── app.js              # Express app (no listen)
 │   └── server.js           # starts HTTP server, graceful shutdown
 ├── frontend/
 │   └── src/
-│       ├── api/            # axios instance + auth/user/song/artist/album/genre/catalog helpers
-│       ├── context/         # AuthContext + AuthProvider
-│       ├── hooks/            # useAuth, useCatalogParams, useDebouncedValue, ...
-│       ├── components/     # common/, layout/, music/ (SongRow, MusicCard, DeleteSongDialog)
+│       ├── api/            # axios instance + auth/user/song/artist/album/genre/catalog helpers,
+│       │                   # + like/playlist/playback/history/recommendation helpers
+│       ├── context/         # AuthContext/AuthProvider, PlayerContext/PlayerProvider,
+│       │                    # PersonalLibraryContext/PersonalLibraryProvider
+│       ├── hooks/            # useAuth, usePlayer, usePersonalLibrary, useCatalogParams, useDebouncedValue, ...
+│       ├── components/     # common/, layout/, music/, player/ (PlayerBar, PlayerControls,
+│       │                   # PlaybackProgress, VolumeControl, QueueDrawer), personal/ (LikeButton,
+│       │                   # AddToPlaylistModal, CreatePlaylistModal, PlaylistCard, ...)
 │       ├── layouts/        # AppLayout, AuthLayout
-│       ├── pages/          # route-level pages, including pages/library/*
+│       ├── pages/          # route-level pages, incl. pages/library/*, pages/liked/, pages/playlists/,
+│       │                   # pages/history/, pages/player/
 │       ├── routes/         # AppRouter, ProtectedRoute, PublicOnlyRoute
+│       ├── utils/          # ... queue, playerStorage, playbackTime
 │       └── ...
 ├── README.md
 └── .gitignore
@@ -241,8 +252,29 @@ existing catalog tables (all statements are idempotent and safe to re-run):
 psql -d rockstar -f backend/database/migrations/002_music_catalog.sql
 ```
 
+Phase 4's migration, `backend/database/migrations/003_player_personal_library.sql`,
+extends the `liked_songs`/`playlists`/`playlist_songs`/`playback_history` tables
+that have existed since Phase 1 with the indexes, constraints, and columns
+Phase 4 needs (idempotent and safe to re-run, like migration 002):
+
+- **`liked_songs`** — an index on `(user_id, created_at DESC)` for "recently
+  liked" ordering.
+- **`playlists`** — a non-blank `name` check, and a case-insensitive unique
+  index on `(user_id, name)` (checks for existing duplicates first and raises
+  a clear error rather than silently resolving them, same as artist/album
+  uniqueness in migration 002).
+- **`playback_history`** — adds `session_token`, `position_seconds`,
+  `qualified_at`, `ended_at`, and `updated_at` columns for playback-session
+  tracking, a non-negative `position_seconds` check, a partial unique index on
+  `session_token` (existing rows keep a `NULL` token and are unaffected), and
+  indexes to support recent/qualified history queries.
+
+```bash
+psql -d rockstar -f backend/database/migrations/003_player_personal_library.sql
+```
+
 `schema.sql` was also updated so a **fresh** database gets the complete
-current schema (Phases 1–3) in one pass.
+current schema (Phases 1–4) in one pass.
 
 ### Supported formats & limits
 
@@ -317,7 +349,7 @@ Frontend runs at `http://localhost:5173` and talks to the backend through
 | frontend  | `npm run dev`    | Start Vite dev server            |
 | frontend  | `npm run build`  | Production build                 |
 
-## API Routes (Phase 3)
+## API Routes (Phases 1–4)
 
 ```
 GET    /api/health
@@ -364,13 +396,37 @@ PATCH  /api/genres/:genreId          # admin
 DELETE /api/genres/:genreId          # admin, blocked if still assigned to songs
 
 GET    /api/catalog/home             # recently added, popular, albums, artists, genres
+
+GET    /api/likes                    # authenticated, paginated, user's liked songs
+GET    /api/likes/ids                # authenticated, all liked song IDs (for LikeButton state)
+PUT    /api/likes/:songId            # authenticated, idempotent, published songs only
+DELETE /api/likes/:songId            # authenticated, idempotent
+
+GET    /api/playlists                # authenticated, owner's playlists
+POST   /api/playlists                # authenticated, non-blank + unique name per user
+GET    /api/playlists/:playlistId    # authenticated, owner only (404 for non-owners)
+PATCH  /api/playlists/:playlistId    # authenticated, owner only (rename/description)
+DELETE /api/playlists/:playlistId    # authenticated, owner only (never deletes the songs/audio)
+POST   /api/playlists/:playlistId/songs           # add, published songs only, duplicate-safe
+DELETE /api/playlists/:playlistId/songs/:songId   # remove
+PATCH  /api/playlists/:playlistId/order           # reorder, transaction-safe resequencing
+
+POST   /api/playback/sessions                        # start, published song required
+PATCH  /api/playback/sessions/:sessionToken/progress  # heartbeat, owner-only, clamped
+POST   /api/playback/sessions/:sessionToken/end       # idempotent
+
+GET    /api/history/recent           # authenticated, qualified plays, deduplicated
+GET    /api/history/stats            # authenticated, real aggregate listening stats
+DELETE /api/history                  # authenticated, clears this user's history only
+
+GET    /api/recommendations          # authenticated, deterministic local-signal ranking
 ```
 
 Uploaded avatars and covers are served read-only from `/uploads/profiles/`
 and `/uploads/covers/`. Music audio is **never** served through
 `express.static` — only through the streaming endpoint above.
 
-## Frontend Routes (Phase 3)
+## Frontend Routes (Phases 1–4)
 
 Public: `/`, `/login`, `/register`, `/forgot-password`, `/reset-password`.
 Authenticated users visiting the four auth pages are redirected to `/home`.
@@ -378,7 +434,8 @@ Authenticated users visiting the four auth pages are redirected to `/home`.
 Protected (redirect guests to `/login`, restoring their original destination
 after a successful login): `/home`, `/library`, `/library/uploads`,
 `/library/upload`, `/songs/:songId`, `/artists/:artistId`,
-`/albums/:albumId`, `/playlists`, `/liked`, `/profile`, `/settings`.
+`/albums/:albumId`, `/playlists`, `/playlists/:playlistId`, `/liked`,
+`/history`, `/player`, `/profile`, `/settings`.
 
 Library search/filter/sort/pagination state lives in the URL
 (`/library?tab=songs&search=rock&sort=title&order=asc&page=1`), so it
@@ -406,23 +463,122 @@ rather than racing to overwrite newer results.
   replace-cover, and delete actions with an accessible confirmation dialog
   that explains exactly what will and won't be deleted.
 
+## Player & Personal Library Architecture (Phase 4)
+
+### One global audio element
+
+`PlayerProvider` (`frontend/src/context/PlayerProvider.jsx`) owns exactly one
+`HTMLAudioElement`, created once in a mount-only effect and never recreated
+by route changes or re-renders. No other component — `SongRow`, `PlayerBar`,
+`PlayerPage`, page components — creates its own `Audio()`; everything reads
+and controls playback only through `usePlayer()`. Mutable per-tick playback
+state (current queue, session token, repeat mode, accumulated listened
+seconds) is kept in refs so imperative event handlers (native `timeupdate`,
+`ended`, etc.) always read fresh values without becoming effect dependencies.
+
+### Queue, shuffle, repeat
+
+Every playable list (Home sections, Library, an album's tracklist, an
+artist's songs, liked songs, a playlist, search results) passes its own
+contextual queue into `playQueue(songs, startIndex)` — selecting a song
+starts the queue at the clicked item's index, and changing an unrelated
+page's filters afterward does not silently replace the already-playing
+queue. Shuffle (`utils/queue.js`) keeps the currently-playing song first,
+shuffles the rest, and preserves the pre-shuffle order so toggling shuffle
+off restores it. Repeat has three modes — off / all / one — and governs both
+natural `ended` transitions and the previous/next boundary behavior
+(previous restarts the current song if more than ~3s in; wraps only under
+repeat-all).
+
+### Playback sessions, qualification, and play counts
+
+Starting playback opens a server-tracked playback session
+(`POST /api/playback/sessions`); the client sends a progress heartbeat
+roughly every 12 seconds (`PATCH .../progress`) — not on every `timeupdate`
+tick — and a best-effort final update on `ended`/logout/tab-close
+(`POST .../end`, also attempted via `pagehide` with `keepalive`). A play only
+"qualifies" (counts toward `play_count` and history) once the listened time
+clears a deterministic threshold, computed once in
+`backend/utils/playbackQualification.js` and never duplicated elsewhere:
+
+```
+threshold = min(durationSeconds, 30, max(5, ceil(durationSeconds * 0.25)))
+```
+
+So a 3s clip qualifies after 3s, a 20s clip after 5s, a 60s song after 15s,
+and anything 120s+ after the 30s cap. Qualification and the `play_count`
+increment each happen at most once per session (guarded by the session's
+`qualified_at IS NULL` check), so repeated heartbeats, seeking, or scrubbing
+never double-count a play, and merely opening/clicking play without
+listening does not count at all.
+
+### Liked songs, playlists, history, recommendations
+
+- **Liked songs** — one shared liked-ID set lives in `PersonalLibraryProvider`
+  so every heart icon across the app (SongRow, PlayerBar, detail pages)
+  reflects the same state; liking/unliking is optimistic with rollback on
+  failure, and concurrent taps on the same song share one in-flight request.
+- **Playlists** — owner-only CRUD, case-insensitive unique names per user,
+  published-songs-only additions, duplicate-membership prevention, and
+  transaction-safe reordering. Deleting a playlist never deletes the songs
+  or their audio.
+- **History** — `/history` shows qualified, deduplicated recent plays and
+  real aggregate stats (listening time, unique songs, top artist/album, most
+  played); clearing history removes only that user's history rows and never
+  touches the catalog's global `play_count`.
+- **Recommendations** — `backend/utils/recommendationRanking.js` scores
+  published songs from transparent, explainable signals (liked
+  artists/albums/genres, recent qualified plays, catalog popularity and
+  recency) with deterministic tie-breaking — no ML, no external model. The UI
+  labels results honestly (e.g. "Based on Your Listening", "From Artists You
+  Like") rather than an unexplained "recommended for you".
+
+### Media Session, keyboard shortcuts, restoration, logout
+
+- **Media Session** — feature-detected (`"mediaSession" in navigator`); when
+  supported, `PlayerProvider` sets `MediaMetadata` (title/artist/album/
+  artwork), registers `play`/`pause`/`previoustrack`/`nexttrack`/
+  `seekbackward`/`seekforward`/`seekto`/`stop` handlers, and keeps
+  `playbackState`/position state in sync. Entirely absent on browsers without
+  support — ordinary playback never depends on it.
+- **Keyboard shortcuts** (`PlayerBar`) — Space (play/pause), Left/Right
+  (seek), Up/Down (volume), M (mute), N/P (next/previous); ignored while
+  focus is in an input, textarea, select, or `contenteditable` element, and
+  cleaned up when the player bar unmounts.
+- **Restoration** — on login, a per-user, versioned, size-bounded snapshot
+  (queue, position, volume, mute, shuffle, repeat) is restored from
+  `localStorage` **paused** (never autoplays); invalid or oversized snapshots
+  are rejected. The snapshot is cleared on logout.
+- **Logout** — pauses playback, ends the active session best-effort, stops
+  the heartbeat, and clears the in-memory queue/current song and the
+  persisted snapshot — so Account B never sees Account A's queue, likes, or
+  playlists. None of this deletes the underlying database rows; a user's
+  likes, playlists, and history are exactly as they left them next login.
+
+### Known browser limitations
+
+- Autoplay: browsers may block `audio.play()` outside a user gesture (e.g.
+  after restoring a session or on certain automatic transitions); Rockstar
+  catches the rejected promise and surfaces "press Play to continue" rather
+  than crashing.
+- Media Session support and behavior (lock-screen/OS media controls,
+  `setPositionState`, individual action availability) varies by browser and
+  OS; everything degrades to "no OS-level media controls" rather than
+  breaking in-page playback.
+
 ## Current Limitations
 
 - No admin UI for publishing songs or managing artists/albums/genres yet —
   those endpoints exist and are fully functional, but are only reachable
   via direct API calls until Phase 5's admin dashboard.
-- No in-browser playback yet — Phase 3 is catalog + streaming infrastructure
-  only; there is no persistent player, queue, or play/pause UI.
+- Recommendations, likes, playlists, and history are per-account personal
+  data — there is no public/shared playlist view yet (`playlists.is_public`
+  exists in the schema but isn't surfaced by any endpoint or UI).
 - Email address is read-only after registration (no verified email-change
   flow yet).
 - Password-reset email delivery requires SMTP configuration; without it,
   reset tokens still work end-to-end but no email is actually sent.
 - No rate limiting on auth or upload endpoints yet.
-
-## Phase 4 (Deferred)
-
-Persistent audio player, playback queue, playlists, liked songs, playback
-history, recommendations.
 
 ## Phase 5 (Deferred)
 
