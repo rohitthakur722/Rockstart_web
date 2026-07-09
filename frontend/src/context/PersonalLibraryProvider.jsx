@@ -12,29 +12,36 @@ export function PersonalLibraryProvider({ children }) {
   const { user, isAuthenticated } = useAuth();
   const userId = user?.id ?? null;
 
+  const scope = isAuthenticated && userId ? String(userId) : null;
+
   const [likedSongIds, setLikedSongIds] = useState(() => new Set());
   const [playlists, setPlaylists] = useState([]);
   const [likesLoading, setLikesLoading] = useState(false);
   const [playlistsLoading, setPlaylistsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [loadedScope, setLoadedScope] = useState(null);
 
   const pendingLikeRequests = useRef(new Map());
 
+  // Render-time reset the instant the signed-in scope changes (logout, or a
+  // different account signing in) — a plain derived-state adjustment rather
+  // than an effect, so it can never race with the fetch below.
+  if (scope !== loadedScope) {
+    setLoadedScope(scope);
+    setLikedSongIds(new Set());
+    setPlaylists([]);
+    setError("");
+    setLikesLoading(Boolean(scope));
+    setPlaylistsLoading(Boolean(scope));
+  }
+
   useEffect(() => {
-    if (!isAuthenticated || !userId) {
-      setLikedSongIds(new Set());
-      setPlaylists([]);
-      setError("");
-      setLikesLoading(false);
-      setPlaylistsLoading(false);
+    if (!scope) {
       pendingLikeRequests.current.clear();
       return undefined;
     }
 
     const controller = new AbortController();
-    setLikesLoading(true);
-    setPlaylistsLoading(true);
-    setError("");
 
     likeApi
       .listLikedIds({ signal: controller.signal })
@@ -57,7 +64,7 @@ export function PersonalLibraryProvider({ children }) {
       });
 
     return () => controller.abort();
-  }, [isAuthenticated, userId]);
+  }, [scope]);
 
   const isLiked = useCallback((songId) => likedSongIds.has(String(songId)), [likedSongIds]);
 
