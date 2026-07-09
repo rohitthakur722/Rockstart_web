@@ -3,6 +3,7 @@ const userModel = require("../model/user.model");
 const refreshTokenModel = require("../model/refreshToken.model");
 const { withTransaction } = require("../config/db");
 const AppError = require("../utils/AppError");
+const { validateImageSignature } = require("../utils/fileSignature");
 
 const getSaltRounds = () => Number(process.env.BCRYPT_SALT_ROUNDS);
 
@@ -52,12 +53,15 @@ const changePassword = async (userId, { currentPassword, newPassword }) => {
   });
 };
 
-const updateAvatar = async (userId, newAvatarUrl) => {
+const updateAvatar = async (userId, avatarFile) => {
   const existing = await userModel.findById(userId);
   if (!existing) {
     throw new AppError("Account not found.", 404);
   }
 
+  await validateImageSignature(avatarFile.path, "Avatar image");
+
+  const newAvatarUrl = `/uploads/profiles/${avatarFile.filename}`;
   const updated = await userModel.updateAvatarUrl(userId, newAvatarUrl);
   return { user: updated, previousAvatarUrl: existing.avatarUrl };
 };

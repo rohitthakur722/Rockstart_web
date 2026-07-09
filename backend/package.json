@@ -11,7 +11,15 @@
     "db:schema": "psql -d \"${DB_NAME:-rockstar}\" -f database/schema.sql",
     "db:seed": "psql -d \"${DB_NAME:-rockstar}\" -f database/seed.sql",
     "uploads:cleanup": "node scripts/cleanupOrphanUploads.js",
-    "uploads:cleanup:delete": "node scripts/cleanupOrphanUploads.js --delete"
+    "uploads:cleanup:delete": "node scripts/cleanupOrphanUploads.js --delete",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
+    "test:unit": "NODE_OPTIONS=--experimental-vm-modules jest tests/unit --runInBand",
+    "test:integration": "NODE_OPTIONS=--experimental-vm-modules jest tests/integration --runInBand",
+    "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage --runInBand",
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch --runInBand",
+    "test:detect-open-handles": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand --detectOpenHandles",
+    "test:db:create": "node tests/setup/createTestDatabase.js",
+    "test:db:reset": "node tests/setup/resetTestDatabase.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
@@ -30,6 +38,8 @@
     "pg": "^8.13.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.9"
+    "jest": "^30.4.2",
+    "nodemon": "^3.1.9",
+    "supertest": "^7.2.2"
   }
 }

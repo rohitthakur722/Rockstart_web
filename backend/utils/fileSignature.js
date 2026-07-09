@@ -21,4 +21,18 @@ const detectFileSignature = async (filePath) => {
   return result || null;
 };
 
-module.exports = { detectFileSignature };
+const AppError = require("./AppError");
+
+const ALLOWED_IMAGE_SIGNATURE_EXTS = new Set(["jpg", "jpeg", "png", "webp"]);
+
+// Shared by every image-upload path (song covers, album covers, avatars) so
+// none of them can be satisfied by a file with a spoofed extension/mimetype
+// that isn't actually a genuine image.
+const validateImageSignature = async (filePath, label) => {
+  const signature = await detectFileSignature(filePath);
+  if (!signature || !ALLOWED_IMAGE_SIGNATURE_EXTS.has(signature.ext?.toLowerCase())) {
+    throw new AppError(`${label} must be a genuine JPEG, PNG, or WebP image.`, 400);
+  }
+};
+
+module.exports = { detectFileSignature, validateImageSignature, ALLOWED_IMAGE_SIGNATURE_EXTS };

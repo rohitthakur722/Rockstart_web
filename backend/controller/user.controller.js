@@ -29,11 +29,9 @@ const updateAvatar = asyncHandler(async (req, res) => {
     throw new AppError("No image file was provided.", 400);
   }
 
-  const newAvatarUrl = `/uploads/profiles/${req.file.filename}`;
-
   let result;
   try {
-    result = await userService.updateAvatar(req.user.id, newAvatarUrl);
+    result = await userService.updateAvatar(req.user.id, req.file);
   } catch (err) {
     await deleteUploadedFile(req.file);
     throw err;

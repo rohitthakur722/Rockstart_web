@@ -6,7 +6,7 @@ const { withTransaction } = require("../config/db");
 const AppError = require("../utils/AppError");
 const { mapSong } = require("../utils/catalogMapper");
 const { extractAudioMetadata } = require("../utils/audioMetadata");
-const { detectFileSignature } = require("../utils/fileSignature");
+const { detectFileSignature, validateImageSignature } = require("../utils/fileSignature");
 const { getImageMaxBytes } = require("../utils/uploadConfig");
 const {
   deleteUploadedFiles,
@@ -16,7 +16,6 @@ const {
 } = require("../utils/fileCleanup");
 
 const ALLOWED_AUDIO_SIGNATURE_EXTS = new Set(["mp3", "wav", "m4a", "mp4", "ogg", "oga"]);
-const ALLOWED_IMAGE_SIGNATURE_EXTS = new Set(["jpg", "jpeg", "png", "webp"]);
 
 const validateAudioSignature = async (filePath) => {
   const signature = await detectFileSignature(filePath);
@@ -25,13 +24,6 @@ const validateAudioSignature = async (filePath) => {
   // which will itself fail on genuinely invalid audio.
   if (signature && !ALLOWED_AUDIO_SIGNATURE_EXTS.has(signature.ext?.toLowerCase())) {
     throw new AppError("The uploaded audio file could not be read.", 400);
-  }
-};
-
-const validateImageSignature = async (filePath, label) => {
-  const signature = await detectFileSignature(filePath);
-  if (!signature || !ALLOWED_IMAGE_SIGNATURE_EXTS.has(signature.ext?.toLowerCase())) {
-    throw new AppError(`${label} must be a genuine JPEG, PNG, or WebP image.`, 400);
   }
 };
 

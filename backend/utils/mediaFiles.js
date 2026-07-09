@@ -1,6 +1,33 @@
 const path = require("path");
 
-const UPLOAD_ROOT = path.join(__dirname, "..", "uploads");
+const BACKEND_ROOT = path.join(__dirname, "..");
+const REAL_UPLOAD_ROOT = path.join(BACKEND_ROOT, "uploads");
+
+// Only NODE_ENV=test ever redirects the managed upload root — TEST_UPLOAD_ROOT
+// being set in a real development/production .env (which it never should be)
+// is not enough by itself, so this can't accidentally misroute real uploads.
+// The resolved path must stay inside the backend project and must never be
+// the real uploads/ directory itself; violating either fails fast rather than
+// silently falling back to a guessed-safe location.
+const resolveUploadRoot = () => {
+  if (process.env.NODE_ENV !== "test" || !process.env.TEST_UPLOAD_ROOT) {
+    return REAL_UPLOAD_ROOT;
+  }
+
+  const raw = process.env.TEST_UPLOAD_ROOT;
+  const resolved = path.isAbsolute(raw) ? path.normalize(raw) : path.join(BACKEND_ROOT, raw);
+
+  const isInsideBackend = resolved === BACKEND_ROOT || resolved.startsWith(BACKEND_ROOT + path.sep);
+  if (!isInsideBackend || resolved === REAL_UPLOAD_ROOT) {
+    throw new Error(
+      `TEST_UPLOAD_ROOT ("${raw}") resolved to an unsafe path. It must be a directory inside the backend project and must not be the real uploads/ directory.`
+    );
+  }
+
+  return resolved;
+};
+
+const UPLOAD_ROOT = resolveUploadRoot();
 
 const MEDIA_DIRS = {
   music: path.join(UPLOAD_ROOT, "music"),

@@ -1,4 +1,4 @@
-const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
+const { rateLimit, ipKeyGenerator, MemoryStore } = require("express-rate-limit");
 
 // Authenticated requests are limited per-account (so one busy user on a
 // shared/NAT'd IP can't crowd out others); unauthenticated requests fall
@@ -21,6 +21,18 @@ const baseOptions = {
   handler: sendRateLimited,
 };
 
+// Explicit stores (rather than each limiter's implicit default one) so tests
+// can reset all limiter state between files/tests via resetAllRateLimiters()
+// — without this, every limiter's in-memory counters live for the lifetime
+// of the Node process and would leak between Jest test files that share one
+// required `app` module (e.g. under --runInBand). Production behavior is
+// identical either way; this only makes the state reachable for resets.
+const generalStore = new MemoryStore();
+const authStore = new MemoryStore();
+const uploadStore = new MemoryStore();
+const adminMutationStore = new MemoryStore();
+const playbackHeartbeatStore = new MemoryStore();
+
 // Global safety net — generous enough for normal catalog browsing and the
 // player's background requests; the route-specific limiters below are what
 // actually protect sensitive endpoints.
@@ -29,6 +41,7 @@ const generalApiLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 300,
   keyGenerator: keyByUserOrIp,
+  store: generalStore,
 });
 
 // Strict, IP-keyed (accounts don't exist yet for register, and login must
@@ -38,6 +51,7 @@ const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
   keyGenerator: (req) => ipKeyGenerator(req.ip),
+  store: authStore,
 });
 
 const uploadLimiter = rateLimit({
@@ -45,6 +59,7 @@ const uploadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 20,
   keyGenerator: keyByUserOrIp,
+  store: uploadStore,
 });
 
 const adminMutationLimiter = rateLimit({
@@ -52,6 +67,7 @@ const adminMutationLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 60,
   keyGenerator: keyByUserOrIp,
+  store: adminMutationStore,
 });
 
 // The player heartbeats roughly every 12s per actively-playing song; this
@@ -62,7 +78,17 @@ const playbackHeartbeatLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 20,
   keyGenerator: keyByUserOrIp,
+  store: playbackHeartbeatStore,
 });
+
+// Test-only utility (harmless if ever called outside tests — it just clears
+// in-memory rate-limit counters). Not gated by NODE_ENV since it performs no
+// destructive or security-relevant action, only a state reset.
+const resetAllRateLimiters = () => {
+  [generalStore, authStore, uploadStore, adminMutationStore, playbackHeartbeatStore].forEach((store) =>
+    store.resetAll()
+  );
+};
 
 module.exports = {
   generalApiLimiter,
@@ -70,4 +96,5 @@ module.exports = {
   uploadLimiter,
   adminMutationLimiter,
   playbackHeartbeatLimiter,
+  resetAllRateLimiters,
 };

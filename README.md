@@ -4,15 +4,16 @@ A full-stack, premium-feeling music player web application. Rockstar mirrors the
 look and feel of the Rockstar mobile app: dark, cinematic, minimal, and built
 around a warm tan/gold brand identity.
 
-This repository was built in five phases. **This document reflects Phase 5**
-— the final feature-development phase. On top of Phase 4's persistent
-player and personal library, Rockstar now has a real admin dashboard (user
+This repository was built in six phases. Phases 1–5 built the full feature
+set: a persistent player and personal library, a real admin dashboard (user
 management, music moderation, artist/album/genre administration, an audit
 log), server-backed user settings (appearance, playback, privacy, security),
 active-session management, account data export, and production security
 hardening (Helmet, route-aware rate limiting, environment validation,
-graceful shutdown). Automated testing (Jest/Supertest) is the one piece
-still deferred to a dedicated testing phase — see [Testing Plan](#testing-plan).
+graceful shutdown). **Phase 6** added the automated test suite — see
+[Testing](#testing) — a Jest + Supertest suite covering the backend API
+against a real, isolated PostgreSQL test database, plus a handful of genuine
+defects the suite surfaced and fixed along the way.
 
 ## Technology Stack
 
@@ -40,9 +41,10 @@ still deferred to a dedicated testing phase — see [Testing Plan](#testing-plan
   no Redux/Zustand/React Query
 
 **Testing**
-- Jest and Supertest will be introduced after the full feature set is built.
-  The backend is structured now (`app.js` exports the Express app without
-  starting a listener) specifically so it is easy to drive with Supertest later.
+- Jest + Supertest, driving the real Express app (`app.js`, exported without
+  starting a listener) against a real, isolated PostgreSQL database
+  (`rockstar_test`) — never mocked, never the development database. See
+  [Testing](#testing).
 
 ## Monorepo Structure
 
@@ -875,17 +877,153 @@ Not yet configured, but relevant when it is:
 - Run `backend/scripts/cleanupOrphanUploads.js` periodically (dry-run first)
   if uploads live on a persistent disk that isn't otherwise garbage-collected.
 
-## Testing Plan
+## Testing
 
-Jest and Supertest are the one piece intentionally deferred to a dedicated
-testing phase after Phase 5 — that phase will add an isolated test database
-and real API integration tests; **neither package was added during Phase 5**.
-The backend's `app.js`/`server.js` split (the Express app is exported without
-calling `.listen()`) exists specifically so Supertest can import `app.js`
-directly once the test suite is added. Pagination, range-parsing,
-catalog-mapping, playback-qualification, recommendation-ranking, and queue
-logic were all written as small pure functions specifically to be easy to
-unit test later without needing a database or a browser.
+Phase 6 added a Jest + Supertest suite (`backend/tests/`) covering the
+backend API: 268 tests across 21 files, all passing, with 90%
+statement / 92% line / 96% function / 69% branch coverage (thresholds:
+75/75/70/65). Only `jest` and `supertest` were added as devDependencies — no
+other test framework, ORM, or third-party testing service.
+
+### Setup (one-time)
+
+1. Have a local PostgreSQL server reachable with the same credentials as
+   your dev `.env` (or your own — the test suite only ever touches its own
+   database).
+2. Copy the template and fill in your local Postgres connection details:
+   ```bash
+   cd backend
+   cp .env.test.example .env.test
+   ```
+   `backend/.env.test` is gitignored and never committed. It **must not**
+   point at the `rockstar` database — `DB_NAME` must end in `_test`
+   (`.env.test.example` sets `DB_NAME=rockstar_test`).
+3. Create the test database and apply the schema:
+   ```bash
+   npm run test:db:create
+   ```
+
+### Running tests
+
+| Command | What it does |
+|---|---|
+| `npm test` | Full suite (unit + integration), serial (`--runInBand`) |
+| `npm run test:unit` | Only `tests/unit/**` — pure functions, no database |
+| `npm run test:integration` | Only `tests/integration/**` — real HTTP + real Postgres |
+| `npm run test:coverage` | Full suite with a coverage report |
+| `npm run test:watch` | Watch mode for local iteration |
+| `npm run test:detect-open-handles` | Diagnostic run for hung Jest workers |
+| `npm run test:db:create` | Create `rockstar_test` (if missing) and apply `schema.sql` |
+| `npm run test:db:reset` | Truncate every application table in `rockstar_test` |
+
+`npm test` **never** touches the `rockstar` database. A hard runtime guard
+(`tests/helpers/assertTestDatabase.js`) runs before every destructive
+operation and refuses to proceed unless `NODE_ENV=test`, `DB_NAME` ends in
+`_test`, and `DB_NAME` is not `rockstar` — misconfiguration aborts loudly
+instead of touching the wrong database.
+
+### How it's isolated from the real app
+
+- **Database** — `rockstar_test`, created/schema'd once per run
+  (`globalSetup`), truncated between test files (`TRUNCATE ... RESTART
+  IDENTITY CASCADE` on every application table) via `truncateAllTables()`.
+  Database-backed tests run serially to avoid concurrent-truncation races.
+- **Uploads** — `TEST_UPLOAD_ROOT` (`backend/tests/.tmp/uploads`) is only
+  ever honored when `NODE_ENV=test`, and `utils/mediaFiles.js` refuses to
+  resolve to anything outside the backend project or equal to the real
+  `uploads/` directory. Test uploads are wiped after each run
+  (`globalTeardown`) and never interact with real dev uploads.
+  `app.js`'s static file serving for `/uploads/profiles` and `/uploads/covers`
+  reads from this same resolved root, so an uploaded avatar/cover is
+  actually retrievable in tests, not just written to disk.
+  See [Defects found and fixed](#defects-found-and-fixed-by-the-test-suite).
+- **Rate limiters** — each limiter (`middleware/rateLimit.middleware.js`)
+  uses an explicit, named `MemoryStore` rather than an implicit default one,
+  and exports `resetAllRateLimiters()`. Test files that make many
+  register/login calls reset all limiter state in a `beforeEach` so
+  legitimate test traffic never trips the real, unmodified 10-per-15-minute
+  auth limit.
+- **Reset-link exposure** — `TEST_EXPOSE_RESET_LINK=true` is a separate flag
+  from dev's `DEV_EXPOSE_RESET_LINK`, so password-reset tests can capture the
+  reset token deterministically without depending on (or being masked by)
+  whatever a developer has set locally.
+- **No mocking of the app itself** — Supertest always imports `backend/app.js`
+  (never `server.js`, so a real TCP port is never opened), and integration
+  tests exercise real Express routing/middleware, real PostgreSQL (via the
+  same `config/db.js` pool the app itself uses), real bcrypt hashing, real
+  JWTs, and the real filesystem. Only genuinely external/nondeterministic
+  boundaries are mocked or stubbed — SMTP is simply unconfigured in
+  `.env.test` (email delivery no-ops safely and the tests never depend on it).
+
+### What's covered
+
+- **Unit** (`tests/unit/`, no database): playback-qualification thresholds,
+  Range-header parsing (full/partial/suffix/unsatisfiable), pagination
+  bounds, field validators, and recommendation ranking/scoring.
+- **Integration** (`tests/integration/`, real HTTP + real Postgres): health/
+  root, full auth lifecycle (register/login/refresh-rotation/reuse-detection/
+  logout/forgot-password/reset-password), profile/avatar/preferences/
+  password-change, active-session management, data export, public catalog
+  browsing, admin CRUD for artists/albums/genres, song upload (real WAV/PNG
+  fixtures, signature validation, metadata-derived duration), ownership and
+  publication rules, byte-range audio streaming, likes, playlists (CRUD +
+  transactional reorder), playback sessions and qualification, listening
+  history, recommendations, the full admin surface (dashboard, user
+  management including the final-administrator and self-action protections,
+  music moderation, audit log), and cross-cutting concerns (security
+  headers, CORS, rate-limit responses, and the API's error-response shape).
+- Test data factories (`tests/helpers/factories.js`) insert directly via
+  parameterized SQL for speed; auth flows (`tests/helpers/auth.js`) always
+  go through the real HTTP register/login endpoints, since exercising the
+  real auth contract is the point.
+- Programmatic test media (`tests/helpers/testMedia.js`) — a real, minimal
+  WAV file with an accurate header (so the server's actual duration-parsing
+  logic can be asserted against), a real minimal PNG/JPEG, and deliberately
+  invalid buffers for negative-path tests. No committed commercial audio.
+
+### Defects found and fixed by the test suite
+
+Building this suite surfaced four genuine, pre-existing defects (each fixed
+via the smallest correct change, verified with a failing-then-passing test,
+not by weakening a test or an authorization check):
+
+1. **Avatar uploads skipped content validation.** `song.service.js` already
+   verified a cover image's real byte signature before accepting it;
+   `user.service.js`'s avatar upload never did, so a non-image file with a
+   spoofed extension/MIME type would be accepted and served publicly. Fixed
+   by extracting the shared `validateImageSignature()` check into
+   `utils/fileSignature.js` and using it for avatars too.
+2. **Static file serving ignored the test upload root.** `app.js` mounted
+   `/uploads/profiles` and `/uploads/covers` from a hardcoded real path,
+   while `utils/mediaFiles.js` already correctly redirected writes under
+   `NODE_ENV=test`. An uploaded test avatar/cover would 404 when fetched
+   back. Fixed by having `app.js` mount from the same `MEDIA_DIRS` the rest
+   of the app already uses.
+3. **Refresh-token reuse detection was over-broad.** Any token presented
+   with `revoked_at` set — whether revoked because it was legitimately
+   *rotated* (a real theft signal) or revoked by an *explicit* action
+   (logout, revoking one session, "sign out other devices", changing
+   password) — triggered a mass revocation of every session for that user.
+   A stale cached token from a device the user had already, intentionally,
+   signed out of would silently log them out everywhere else too. Fixed in
+   `auth.service.js` by only treating `replaced_by_token_id`-set tokens (the
+   actual rotation-reuse signal) as theft; an explicitly-revoked token now
+   just reports "session expired."
+4. **Jest + ESM-only dependency interop.** `music-metadata` and `file-type`
+   are ESM-only, loaded via dynamic `import()`; Jest's default CommonJS
+   module environment throws on this without a Node flag. Fixed by running
+   Jest with `NODE_OPTIONS=--experimental-vm-modules` (baked into every
+   `test*` npm script) — a test-runner configuration fix, not a production
+   code change.
+
+### Coverage exclusions
+
+`server.js` (starts the real listener + signal handling — exercised
+manually, since tests must never open a real TCP port) and
+`config/env.js` (a startup-only environment guard, invoked only from
+`server.js`) are excluded from coverage collection for the same reason:
+neither is reachable through the HTTP layer Supertest drives. No service,
+controller, or model is excluded.
 
 ## No-ORM Statement
 

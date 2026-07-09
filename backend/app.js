@@ -1,4 +1,3 @@
-const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -9,6 +8,7 @@ const notFound = require("./middleware/notFound.middleware");
 const errorMiddleware = require("./middleware/error.middleware");
 const requestLogger = require("./middleware/requestLogger.middleware");
 const { generalApiLimiter } = require("./middleware/rateLimit.middleware");
+const { MEDIA_DIRS } = require("./utils/mediaFiles");
 
 const app = express();
 const isProduction = process.env.NODE_ENV === "production";
@@ -72,8 +72,8 @@ app.use("/api", generalApiLimiter);
 // server through GET /api/songs/:songId/stream, which enforces publication
 // and ownership access rules before streaming any bytes.
 const staticUploadOptions = { maxAge: "7d", index: false, dotfiles: "deny" };
-app.use("/uploads/profiles", express.static(path.join(__dirname, "uploads", "profiles"), staticUploadOptions));
-app.use("/uploads/covers", express.static(path.join(__dirname, "uploads", "covers"), staticUploadOptions));
+app.use("/uploads/profiles", express.static(MEDIA_DIRS.profiles, staticUploadOptions));
+app.use("/uploads/covers", express.static(MEDIA_DIRS.covers, staticUploadOptions));
 
 app.use("/api", routes);
 

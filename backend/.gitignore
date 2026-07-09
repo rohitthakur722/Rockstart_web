@@ -1,4 +1,5 @@
 .env
+.env.test
 node_modules/
 uploads/music/*
 uploads/covers/*
@@ -10,3 +11,4 @@ uploads/playlists/*
 !uploads/playlists/.gitkeep
 logs/
 coverage/
+tests/.tmp/

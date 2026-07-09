@@ -115,12 +115,18 @@ const refreshSession = async (rawRefreshToken, context = {}) => {
   }
 
   if (tokenRow.revoked_at || new Date(tokenRow.expires_at) <= new Date()) {
-    // Reuse of an already-rotated/revoked token is treated as a possible theft
-    // signal: revoke every active session for this user as a precaution.
-    if (tokenRow.revoked_at) {
+    // Only a token revoked *because it was rotated* (replaced_by_token_id set)
+    // is a theft signal — presenting it again means someone has a copy of a
+    // token that was already exchanged for a newer one. A token revoked by an
+    // explicit action (logout, revoking one session, "sign out other
+    // devices", changing password) has replaced_by_token_id left NULL; that
+    // just means the session is over, not stolen, so it must not cascade
+    // into revoking the user's other, still-legitimate sessions.
+    if (tokenRow.revoked_at && tokenRow.replaced_by_token_id) {
       await refreshTokenModel.revokeAllForUser(tokenRow.user_id);
+      throw new AppError(REUSE_DETECTED_MESSAGE, 401);
     }
-    throw new AppError(REUSE_DETECTED_MESSAGE, 401);
+    throw new AppError("Session expired. Please log in again.", 401);
   }
 
   const user = await userModel.findById(payload.sub);
