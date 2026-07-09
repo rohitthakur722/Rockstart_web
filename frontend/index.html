@@ -5,8 +5,41 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Rockstar — a focused music experience built around your library." />
-    <meta name="theme-color" content="#0d0d0d" />
+    <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f5efe4" media="(prefers-color-scheme: light)" />
+    <meta name="application-name" content="Rockstar" />
     <title>Rockstar | Music Player</title>
+    <script>
+      // Applies theme/reduced-motion/compact-layout before first paint, from
+      // the same localStorage cache PreferenceProvider maintains — avoids a
+      // flash of the wrong theme while React and any network request are
+      // still starting up. Falls back to OS-level signals when nothing is
+      // cached yet (first visit, or a guest who has never set a preference).
+      (function () {
+        try {
+          var raw = window.localStorage.getItem("rockstar:appearance:v1");
+          var cached = raw ? JSON.parse(raw) : null;
+          var theme = cached && cached.theme ? cached.theme : "system";
+          var prefersReducedMotion =
+            window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          var reduceMotion = cached ? Boolean(cached.reduceMotion) : Boolean(prefersReducedMotion);
+          var compactLayout = cached ? Boolean(cached.compactLayout) : false;
+          var resolvedTheme =
+            theme === "system"
+              ? window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light"
+              : theme;
+
+          var root = document.documentElement;
+          root.setAttribute("data-theme", resolvedTheme);
+          root.setAttribute("data-reduce-motion", String(reduceMotion));
+          root.setAttribute("data-compact", String(compactLayout));
+        } catch (e) {
+          // Ignore — CSS already has sensible dark-theme defaults with no attribute set.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,8 +1,9 @@
 import { Link, NavLink } from "react-router-dom";
 import { cn } from "../../utils/cn";
-import { MusicNoteIcon } from "../common/icons";
+import { MusicNoteIcon, ShieldIcon } from "../common/icons";
 import { Avatar } from "../common/Avatar";
 import { useAuth } from "../../hooks/useAuth";
+import { useAppVersion } from "../../hooks/useAppVersion";
 import { NAV_ITEMS } from "./navigationItems";
 
 function NavItem({ to, label, icon: Icon, onNavigate }) {
@@ -32,6 +33,7 @@ function NavItem({ to, label, icon: Icon, onNavigate }) {
 
 export function Sidebar() {
   const { user } = useAuth();
+  const versionInfo = useAppVersion();
 
   return (
     <aside
@@ -49,6 +51,12 @@ export function Sidebar() {
         {NAV_ITEMS.map((item) => (
           <NavItem key={item.to} {...item} />
         ))}
+        {user?.role === "admin" && (
+          <>
+            <div className="my-2 border-t border-rockstar-border" role="separator" />
+            <NavItem to="/admin" label="Admin" icon={ShieldIcon} />
+          </>
+        )}
       </nav>
 
       <Link
@@ -60,7 +68,9 @@ export function Sidebar() {
           <span className="block truncate text-sm font-medium text-rockstar-text-primary">
             {user?.fullName}
           </span>
-          <span className="block text-xs text-rockstar-text-secondary">Rockstar &middot; v1.0.0</span>
+          <span className="block text-xs text-rockstar-text-secondary">
+            Rockstar {versionInfo ? `· v${versionInfo.version}` : ""}
+          </span>
         </span>
       </Link>
     </aside>

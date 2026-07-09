@@ -197,6 +197,55 @@ const findPublishedByAlbum = async (albumId) => {
   return result.rows;
 };
 
+const VALID_ADMIN_STATUSES = new Set(["all", "draft", "published"]);
+
+const buildAdminFilters = (params, { status, search, uploaderId }) => {
+  const clauses = [];
+
+  if (status === "draft") clauses.push("s.is_published = FALSE");
+  else if (status === "published") clauses.push("s.is_published = TRUE");
+
+  if (search) {
+    params.push(`%${search}%`);
+    clauses.push(`(s.title ILIKE $${params.length} OR ar.name ILIKE $${params.length} OR al.title ILIKE $${params.length})`);
+  }
+  if (uploaderId) {
+    params.push(uploaderId);
+    clauses.push(`s.uploaded_by = $${params.length}`);
+  }
+
+  return clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+};
+
+// Cross-user admin listing (unlike findMineList, not scoped to one uploader
+// unless uploaderId is explicitly given) — backs GET /api/admin/songs.
+const findAdminList = async ({ status, search, uploaderId, sort, order, limit, offset }) => {
+  const column = SORT_COLUMNS[sort] || SORT_COLUMNS.createdAt;
+  const params = [];
+  const where = buildAdminFilters(params, { status, search, uploaderId });
+
+  params.push(limit, offset);
+
+  const result = await query(
+    `SELECT ${SELECT_COLUMNS},
+            uploader.full_name AS uploader_full_name, uploader.username AS uploader_username
+     ${BASE_FROM}
+     LEFT JOIN users uploader ON uploader.id = s.uploaded_by
+     ${where}
+     ORDER BY ${column} ${order}, s.id ASC
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params
+  );
+  return result.rows;
+};
+
+const countAdminList = async ({ status, search, uploaderId }) => {
+  const params = [];
+  const where = buildAdminFilters(params, { status, search, uploaderId });
+  const result = await query(`SELECT COUNT(*) AS count ${BASE_FROM} ${where}`, params);
+  return Number(result.rows[0].count);
+};
+
 const create = async (
   {
     title,
@@ -286,6 +335,8 @@ module.exports = {
   countPublicList,
   findMineList,
   countMineList,
+  findAdminList,
+  countAdminList,
   findById,
   findStreamInfoById,
   findRecentlyAdded,

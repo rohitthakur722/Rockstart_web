@@ -12,6 +12,11 @@ const playlistRoutes = require("./playlist.routes");
 const playbackRoutes = require("./playback.routes");
 const historyRoutes = require("./history.routes");
 const recommendationRoutes = require("./recommendation.routes");
+const { APP_VERSION, APP_PHASE } = require("../utils/version");
+const adminRoutes = require("./admin.routes");
+const adminUserRoutes = require("./adminUser.routes");
+const adminCatalogRoutes = require("./adminCatalog.routes");
+const adminAuditRoutes = require("./adminAudit.routes");
 
 const router = express.Router();
 
@@ -19,7 +24,7 @@ router.get("/", (_req, res) => {
   res.json({
     success: true,
     message: "Rockstar API",
-    data: { version: "1.0.0-phase4" },
+    data: { version: APP_VERSION, phase: APP_PHASE },
   });
 });
 
@@ -36,5 +41,9 @@ router.use("/playlists", playlistRoutes);
 router.use("/playback", playbackRoutes);
 router.use("/history", historyRoutes);
 router.use("/recommendations", recommendationRoutes);
+router.use("/admin", adminRoutes);
+router.use("/admin/users", adminUserRoutes);
+router.use("/admin", adminCatalogRoutes);
+router.use("/admin/audit-logs", adminAuditRoutes);
 
 module.exports = router;

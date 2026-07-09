@@ -1,6 +1,11 @@
 const { getRefreshExpirySeconds } = require("./token");
 
-const REFRESH_COOKIE_PATH = "/api/auth";
+// Phase 5's session-management endpoints (/api/users/me/sessions) need to
+// read this cookie to identify "the current session" — scoping it to
+// "/api/auth" (as in Phase 2) would mean the browser never sends it to
+// /api/users/* at all. "/api" is still narrower than every path, still
+// HttpOnly/Secure, and covers every route that legitimately needs it.
+const REFRESH_COOKIE_PATH = "/api";
 
 const getRefreshCookieName = () => process.env.REFRESH_COOKIE_NAME;
 

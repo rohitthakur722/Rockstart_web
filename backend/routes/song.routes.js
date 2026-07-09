@@ -5,6 +5,7 @@ const optionalAuthenticate = require("../middleware/optionalAuthenticate.middlew
 const authorizeRoles = require("../middleware/authorize.middleware");
 const uploadErrorMiddleware = require("../middleware/uploadError.middleware");
 const { createUploader, createSongUploader } = require("../utils/uploadConfig");
+const { uploadLimiter } = require("../middleware/rateLimit.middleware");
 
 const router = express.Router();
 const uploadSong = createSongUploader();
@@ -12,7 +13,7 @@ const uploadSongCover = createUploader("covers").single("cover");
 
 router.get("/", optionalAuthenticate, songController.listPublic);
 router.get("/mine", authenticate, songController.listMine);
-router.post("/", authenticate, uploadSong, uploadErrorMiddleware, songController.create);
+router.post("/", authenticate, uploadLimiter, uploadSong, uploadErrorMiddleware, songController.create);
 
 router.get("/:songId", optionalAuthenticate, songController.getDetail);
 router.get("/:songId/stream", optionalAuthenticate, songController.stream);
@@ -20,6 +21,7 @@ router.patch("/:songId", authenticate, songController.update);
 router.patch(
   "/:songId/cover",
   authenticate,
+  uploadLimiter,
   uploadSongCover,
   uploadErrorMiddleware,
   songController.replaceCover

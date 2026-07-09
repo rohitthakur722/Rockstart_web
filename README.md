@@ -4,12 +4,15 @@ A full-stack, premium-feeling music player web application. Rockstar mirrors the
 look and feel of the Rockstar mobile app: dark, cinematic, minimal, and built
 around a warm tan/gold brand identity.
 
-This repository is being built in five phases. **This document reflects Phase
-4** — on top of Phase 3's catalog and streaming infrastructure, Rockstar now
-has a real, persistent in-browser player: a single global audio element with
-a queue, shuffle, repeat, seeking, volume, Media Session integration, and
-keyboard shortcuts, plus a personal library (liked songs, playlists),
-qualified-play listening history, and locally-derived recommendations.
+This repository was built in five phases. **This document reflects Phase 5**
+— the final feature-development phase. On top of Phase 4's persistent
+player and personal library, Rockstar now has a real admin dashboard (user
+management, music moderation, artist/album/genre administration, an audit
+log), server-backed user settings (appearance, playback, privacy, security),
+active-session management, account data export, and production security
+hardening (Helmet, route-aware rate limiting, environment validation,
+graceful shutdown). Automated testing (Jest/Supertest) is the one piece
+still deferred to a dedicated testing phase — see [Testing Plan](#testing-plan).
 
 ## Technology Stack
 
@@ -18,6 +21,8 @@ qualified-play listening history, and locally-derived recommendations.
 - PostgreSQL via the `pg` driver — **no ORM or query builder** (no Prisma,
   Sequelize, TypeORM, Knex, or Drizzle). All SQL is raw and parameterized.
 - CORS, cookie-parser, dotenv, Multer, bcrypt, jsonwebtoken, nodemailer
+- Helmet (security headers + CSP), express-rate-limit (route-aware rate
+  limiting), compression (gzip) — see [Security Hardening](#security-hardening-phase-5)
 - `music-metadata` and `file-type` for server-side audio validation (both are
   ESM-only; loaded from the CommonJS backend via a small `import()` wrapper
   in `utils/audioMetadata.js` / `utils/fileSignature.js` rather than
@@ -46,36 +51,45 @@ RockStar/
 ├── backend/
 │   ├── config/          # env validation, PostgreSQL pool + transaction helper
 │   ├── controller/       # auth, user, health, song, artist, album, genre, catalog,
-│   │                     # like, playlist, playback, history, recommendation
+│   │                     # like, playlist, playback, history, recommendation,
+│   │                     # admin, adminUser, adminCatalog, adminAudit
 │   ├── service/          # business logic incl. song upload/streaming pipeline,
-│   │                     # playback-session lifecycle, recommendation ranking
+│   │                     # playback-session lifecycle, recommendation ranking,
+│   │                     # admin dashboard aggregates, adminUser (role/status +
+│   │                     # final-admin protection), adminAudit, adminCatalog,
+│   │                     # userPreference, session (active-session management),
+│   │                     # dataExport
 │   ├── model/             # raw parameterized SQL (user, refreshToken, song, artist, album, genre,
-│   │                       # like, playlist, playbackHistory, ...)
-│   ├── routes/            # Express routers (one per resource)
-│   ├── middleware/       # authenticate, optionalAuthenticate, authorize, error, upload-error
+│   │                       # like, playlist, playbackHistory, admin, adminUser,
+│   │                       # adminAudit, userPreference, ...)
+│   ├── routes/            # Express routers (one per resource, incl. admin*.routes.js)
+│   ├── middleware/       # authenticate, optionalAuthenticate, authorize, error,
+│   │                     # upload-error, rateLimit, requestLogger
 │   ├── validation/        # small hand-written request validators
-│   ├── database/          # schema.sql, seed.sql, migrations/ (incl. 003_player_personal_library.sql)
+│   ├── database/          # schema.sql, seed.sql, migrations/ (001–004)
+│   ├── scripts/            # cleanupOrphanUploads.js (dry-run by default)
 │   ├── uploads/            # music/ (never served directly), covers/, profiles/
 │   ├── utils/              # AppError, pagination, rangeParser, catalogMapper,
 │   │                       # audioMetadata, fileSignature, mediaFiles, fileCleanup, uploadConfig,
-│   │                       # playbackQualification, recommendationRanking
-│   ├── app.js              # Express app (no listen)
-│   └── server.js           # starts HTTP server, graceful shutdown
+│   │                       # playbackQualification, recommendationRanking, version
+│   ├── app.js              # Express app (no listen) — Helmet, rate limiting, compression
+│   └── server.js           # starts HTTP server, graceful shutdown (repeated-signal + forced-timeout safe)
 ├── frontend/
 │   └── src/
 │       ├── api/            # axios instance + auth/user/song/artist/album/genre/catalog helpers,
-│       │                   # + like/playlist/playback/history/recommendation helpers
-│       ├── context/         # AuthContext/AuthProvider, PlayerContext/PlayerProvider,
-│       │                    # PersonalLibraryContext/PersonalLibraryProvider
-│       ├── hooks/            # useAuth, usePlayer, usePersonalLibrary, useCatalogParams, useDebouncedValue, ...
-│       ├── components/     # common/, layout/, music/, player/ (PlayerBar, PlayerControls,
-│       │                   # PlaybackProgress, VolumeControl, QueueDrawer), personal/ (LikeButton,
-│       │                   # AddToPlaylistModal, CreatePlaylistModal, PlaylistCard, ...)
-│       ├── layouts/        # AppLayout, AuthLayout
+│       │                   # + like/playlist/playback/history/recommendation/admin/preference/app helpers
+│       ├── context/         # AuthContext/AuthProvider, PreferenceContext/PreferenceProvider,
+│       │                    # PlayerContext/PlayerProvider, PersonalLibraryContext/PersonalLibraryProvider
+│       ├── hooks/            # useAuth, usePreferences, usePlayer, usePersonalLibrary,
+│       │                    # useAppVersion, useCatalogParams, useDebouncedValue, ...
+│       ├── components/     # common/ (incl. Switch), admin/ (AdminMetricCard, AdminTable,
+│       │                   # UserStatusBadge, MusicStatusBadge), layout/, music/, player/,
+│       │                   # personal/, profile/ (ChangePasswordCard, ActiveSessionsCard)
+│       ├── layouts/        # AppLayout, AuthLayout, AdminLayout
 │       ├── pages/          # route-level pages, incl. pages/library/*, pages/liked/, pages/playlists/,
-│       │                   # pages/history/, pages/player/
-│       ├── routes/         # AppRouter, ProtectedRoute, PublicOnlyRoute
-│       ├── utils/          # ... queue, playerStorage, playbackTime
+│       │                   # pages/history/, pages/player/, pages/admin/* (lazy-loaded)
+│       ├── routes/         # AppRouter, ProtectedRoute, PublicOnlyRoute, AdminRoute
+│       ├── utils/          # ... queue, playerStorage, playbackTime, appearanceStorage
 │       └── ...
 ├── README.md
 └── .gitignore
@@ -94,9 +108,12 @@ Route → Middleware → Controller → Service → Model → PostgreSQL (pg.Poo
   callback, client always released), a `checkConnection()` health probe, and
   `closePool()` for graceful shutdown.
 - **`config/env.js`** validates required environment variables at startup —
-  auth rules from Phase 2, plus Phase 3 rules: music/image upload limits and
+  auth rules from Phase 2, Phase 3 rules (music/image upload limits and
   catalog page-size limits must be positive integers within sane bounds, and
-  the maximum page size can never be smaller than the default.
+  the maximum page size can never be smaller than the default), and Phase 5
+  production-safety rules (JWT secrets must be real/distinct/long enough,
+  `COOKIE_SECURE` must be true in production, no example placeholder values
+  left in `DB_PASSWORD`, no dev-only reset-link exposure in production).
 - All SQL is written by hand and parameterized (`$1`, `$2`, ...). No query
   ever concatenates user input into a SQL string.
 - **`middleware/error.middleware.js`** is the single global error handler. It
@@ -141,10 +158,11 @@ Every new song starts as `is_published = false` (a private draft only the
 uploader — or an admin — can see or stream). Ordinary users can upload, view,
 edit, and delete their own songs, but **cannot publish them**. Publishing is
 an admin-only action (`PATCH /api/songs/:id/publication`,
-`authorizeRoles("admin")`) — this is Phase 3's moderation *foundation*; there
-is no admin UI yet, so publishing currently happens via a direct API call.
-Public catalog endpoints (`GET /api/songs`, Home, artist/album detail) only
-ever return published songs.
+`authorizeRoles("admin")`) — Phase 3 built the moderation foundation; Phase 5
+adds the actual admin UI (`/admin/music`) on top of it, reusing the same
+service functions rather than duplicating the logic. Public catalog endpoints
+(`GET /api/songs`, Home, artist/album detail) only ever return published
+songs.
 
 ### Audio streaming
 
@@ -273,8 +291,32 @@ Phase 4 needs (idempotent and safe to re-run, like migration 002):
 psql -d rockstar -f backend/database/migrations/003_player_personal_library.sql
 ```
 
+Phase 5's migration, `backend/database/migrations/004_admin_settings_release.sql`,
+adds two new tables plus admin/settings-related indexes (idempotent, preserves
+all existing data — no table is dropped or recreated):
+
+- **`user_preferences`** — one row per user (`user_id` is the primary key,
+  `ON DELETE CASCADE`), created on first read/write with sensible defaults
+  (`theme_preference = 'system'`, `autoplay_next`/`remember_player_state`/
+  `keyboard_shortcuts_enabled = true`, `reduce_motion`/`compact_layout =
+  false`). `theme_preference` is constrained to `'system' | 'dark' | 'light'`.
+- **`admin_audit_logs`** — append-only administrative action log
+  (`admin_user_id` nullable + `ON DELETE SET NULL` so a log entry survives
+  even if the acting account were ever removed), with indexes on
+  `created_at DESC`, `admin_user_id`, and `(target_type, target_id)`.
+- Additional indexes: `users (role, is_active)` and `users (created_at DESC)`
+  for admin user listing/filtering and the final-admin-protection count;
+  `songs (is_published, created_at DESC)` and `songs (uploaded_by,
+  is_published)` for admin music moderation; a partial index on
+  `refresh_tokens (user_id, expires_at DESC) WHERE revoked_at IS NULL` for
+  the active-sessions list.
+
+```bash
+psql -d rockstar -f backend/database/migrations/004_admin_settings_release.sql
+```
+
 `schema.sql` was also updated so a **fresh** database gets the complete
-current schema (Phases 1–4) in one pass.
+current schema (Phases 1–5) in one pass.
 
 ### Supported formats & limits
 
@@ -326,6 +368,34 @@ Backend runs at `http://localhost:5000`. Health check:
 (All Phase 2 auth/cookie/SMTP variables are unchanged — see git history or
 the `.env.example` file for the full list.)
 
+#### Environment variables (new in Phase 5)
+
+| Variable | Purpose |
+|---|---|
+| `TRUST_PROXY` | Optional. Set to `true` only when running behind a real reverse proxy/load balancer, so Express trusts `X-Forwarded-*` for `req.ip`/`req.secure` (also used by the per-account rate limiters). Leave unset in local development. |
+
+Rate limits (general API, auth, uploads, admin mutations, playback
+heartbeat) are currently fixed, sensible defaults in
+`backend/middleware/rateLimit.middleware.js` rather than environment
+variables — see [Security Hardening](#security-hardening-phase-5).
+
+#### Creating the first administrator
+
+There is deliberately no role selector on the public registration form.
+Register a normal account first, then promote it directly in the database:
+
+```sql
+UPDATE users SET role = 'admin' WHERE email = 'you@example.com';
+```
+
+Run this only against your own controlled database — never expose an
+admin-creation endpoint publicly, and never seed a default admin password.
+The change takes effect on that account's next login **or** page
+refresh/session-refresh (`POST /api/auth/refresh` re-reads the user row from
+the database each time) — the in-memory user object from an existing tab
+does not update itself immediately. Existing admins can also promote other
+accounts from `/admin/users` without touching SQL again.
+
 ### 3. Frontend
 
 ```bash
@@ -349,7 +419,7 @@ Frontend runs at `http://localhost:5173` and talks to the backend through
 | frontend  | `npm run dev`    | Start Vite dev server            |
 | frontend  | `npm run build`  | Production build                 |
 
-## API Routes (Phases 1–4)
+## API Routes (Phases 1–5)
 
 ```
 GET    /api/health
@@ -367,6 +437,12 @@ GET    /api/users/me
 PATCH  /api/users/me
 PATCH  /api/users/me/avatar
 PATCH  /api/users/me/password
+GET    /api/users/me/preferences
+PATCH  /api/users/me/preferences
+GET    /api/users/me/sessions
+DELETE /api/users/me/sessions/:sessionId
+POST   /api/users/me/sessions/revoke-others
+GET    /api/users/me/export           # downloadable JSON, no secrets/tokens
 
 GET    /api/songs                    # public, published only, search/filter/sort/paginate
 GET    /api/songs/mine               # authenticated, own drafts + published
@@ -420,13 +496,30 @@ GET    /api/history/stats            # authenticated, real aggregate listening s
 DELETE /api/history                  # authenticated, clears this user's history only
 
 GET    /api/recommendations          # authenticated, deterministic local-signal ranking
+
+GET    /api/admin/dashboard          # admin only, real aggregate platform metrics
+
+GET    /api/admin/users              # admin only, search/filter/sort/paginate
+GET    /api/admin/users/:userId      # admin only
+PATCH  /api/admin/users/:userId/role     # admin only, final-admin + self-protected, audit-logged
+PATCH  /api/admin/users/:userId/status   # admin only, final-admin + self-protected, audit-logged
+
+GET    /api/admin/songs              # admin only, cross-user listing (draft/published/uploader filters)
+GET    /api/admin/songs/:songId      # admin only
+PATCH  /api/admin/songs/:songId/publication  # admin only, audit-logged (reuses song.service)
+DELETE /api/admin/songs/:songId      # admin only, audit-logged (reuses song.service)
+
+GET    /api/admin/audit-logs         # admin only, paginated + filterable
+
+# Artist/Album/Genre admin mutations reuse the existing routes above
+# (POST/PATCH/DELETE /api/artists|albums|genres) — audit-logged, not duplicated.
 ```
 
 Uploaded avatars and covers are served read-only from `/uploads/profiles/`
 and `/uploads/covers/`. Music audio is **never** served through
 `express.static` — only through the streaming endpoint above.
 
-## Frontend Routes (Phases 1–4)
+## Frontend Routes (Phases 1–5)
 
 Public: `/`, `/login`, `/register`, `/forgot-password`, `/reset-password`.
 Authenticated users visiting the four auth pages are redirected to `/home`.
@@ -436,6 +529,13 @@ after a successful login): `/home`, `/library`, `/library/uploads`,
 `/library/upload`, `/songs/:songId`, `/artists/:artistId`,
 `/albums/:albumId`, `/playlists`, `/playlists/:playlistId`, `/liked`,
 `/history`, `/player`, `/profile`, `/settings`.
+
+Admin-only (guarded by `AdminRoute` — redirects guests to `/login` and
+non-admins to `/home`; the real security boundary is still the backend, which
+re-verifies `role` from the database on every request): `/admin`,
+`/admin/users`, `/admin/music`, `/admin/artists`, `/admin/albums`,
+`/admin/genres`, `/admin/audit-logs`. Each admin page is lazy-loaded
+(`React.lazy`), so ordinary users never download that code.
 
 Library search/filter/sort/pagination state lives in the URL
 (`/library?tab=songs&search=rock&sort=title&order=asc&page=1`), so it
@@ -566,11 +666,180 @@ listening does not count at all.
   OS; everything degrades to "no OS-level media controls" rather than
   breaking in-page playback.
 
+## Admin Dashboard & Moderation (Phase 5)
+
+### Authorization
+
+Every `/api/admin/*` route requires `authenticate` (valid, active session)
+**and** `authorizeRoles("admin")`. Role is never trusted from the request
+body, query parameters, or frontend state — `authenticate.middleware.js`
+re-reads the user row from PostgreSQL on every single request, so a
+demoted/suspended admin loses access immediately, not just after their token
+expires. The frontend's `AdminRoute` guard and the conditional "Admin"
+sidebar link are UX conveniences only; they are not the security boundary.
+
+### Dashboard
+
+`GET /api/admin/dashboard` returns only real, current-state aggregates — user
+counts (total/active/suspended/administrators), catalog counts
+(songs/published/draft, artists, albums, genres, playlists), platform-wide
+qualified plays and listening time, bounded "recent registrations"/"recent
+uploads" lists, and real most-played songs. No fabricated growth
+percentages, revenue, or engagement charts.
+
+### User management
+
+`/admin/users` supports search (name/username/email), role/status filters,
+sorting, and pagination. Role changes and suspend/reactivate both:
+
+- Reject the acting admin targeting **themselves** (self-demotion and
+  self-suspension are blocked at the API, not just a disabled button).
+- Reject an action that would leave **zero active administrators** — the
+  check locks every active-admin row (`FOR UPDATE`) inside a transaction, so
+  two concurrent demotions can't both succeed and empty the admin set.
+- Revoke the target's refresh-token sessions immediately, so a privilege
+  change or suspension takes effect everywhere without waiting for their
+  access token to expire naturally.
+- Write an audit-log entry.
+
+Suspension is clearly labeled "Suspend"/"Reactivate" — never presented as
+deletion; suspending never deletes a user's likes, playlists, or history.
+
+### Music moderation, artists, albums, genres
+
+`/admin/music` lists every song across every uploader (draft/published/
+uploader filters), and reuses the existing `song.service.js` functions for
+publish/unpublish/delete rather than duplicating that logic — the admin
+layer only adds the cross-user listing query and audit logging around the
+same calls. Deleting a song as an admin removes the database record, the
+managed audio file, and the song's own cover, but never touches album
+artwork.
+
+Artist/Album/Genre administration (`/admin/artists`, `/admin/albums`,
+`/admin/genres`) reuses the **existing** Phase 3 endpoints
+(`POST`/`PATCH`/`DELETE /api/artists|albums|genres`, already
+`authorizeRoles("admin")`-gated) rather than introducing a parallel set of
+admin-only routes — Phase 5 only adds the frontend UI and audit logging
+around those same calls. Case-insensitive duplicate prevention and
+safe-delete conflict checks (e.g. an artist with albums/songs still attached)
+were already enforced by the service layer.
+
+### Audit log
+
+`admin_audit_logs` records: role changes, activation/suspension, song
+publish/unpublish/admin-delete, and artist/album/genre create/update/delete
+— each with the acting admin, action, target type/ID, safe JSON metadata
+(never passwords, hashes, or tokens), and a timestamp. `/admin/audit-logs`
+supports pagination and action/target-type filters, and renders readable
+action descriptions rather than raw JSON.
+
+## Settings & Preferences (Phase 5)
+
+`/settings` replaced the Phase 1–4 placeholder page with five real sections:
+
+- **Appearance** — System/Dark/Light theme, reduced motion, compact layout.
+  All three are server-backed (`user_preferences`) and applied instantly via
+  `data-theme`/`data-reduce-motion`/`data-compact` attributes on `<html>`,
+  which the CSS in `frontend/src/index.css` keys off of — light and dark
+  share the same warm tan/gold accent, just with an inverted surface
+  hierarchy. `PreferenceProvider` caches the last-known values in
+  `localStorage`, and `index.html` has a small inline script that applies
+  them **before** React mounts (falling back to `prefers-color-scheme`/
+  `prefers-reduced-motion` when nothing is cached yet), so there's no flash
+  of the wrong theme on load.
+- **Playback** — autoplay-next, remember-player-state, and keyboard-shortcuts
+  toggles, consumed directly by `PlayerProvider`/`PlayerBar`: disabling
+  autoplay-next stops playback at the end of the current song (repeat-one
+  still repeats; manual Next/Previous still work); disabling
+  remember-player-state clears any already-saved restoration snapshot and
+  stops writing new ones; disabling keyboard shortcuts turns off `PlayerBar`'s
+  global key handler entirely.
+- **Privacy** — clear listening history (confirmation required; current user
+  only; never touches global `play_count`, likes, or playlists) and a
+  bounded JSON data export.
+- **Security** — change password (shared component with Profile, not
+  duplicated), active-session list with per-session revoke and "sign out
+  other sessions," and a current-session logout.
+- **About** — accurate version/phase, pulled from `GET /api` (backed by
+  `backend/utils/version.js`, itself reading `package.json` — one source of
+  truth, not duplicated across components).
+
+### Active sessions
+
+`refresh_tokens` already recorded `user_agent`/`ip_address`/`expires_at`;
+Phase 5 adds `GET/DELETE /api/users/me/sessions` and `POST
+/api/users/me/sessions/revoke-others` on top of it. The refresh cookie's
+path was widened from `/api/auth` to `/api` (still HttpOnly/Secure, still
+narrower than the whole origin) specifically so these `/api/users/me/*`
+routes can read it to identify "the current session" — token hashes are
+compared server-side only and never appear in any API response.
+
+### Data export
+
+`GET /api/users/me/export` returns a bounded, deliberately-structured JSON
+download (profile, preferences, liked-song references, playlists with
+membership, qualified listening history, uploaded-song metadata) — never
+password hashes, tokens, SMTP config, server paths, or other users' data.
+
+## Security Hardening (Phase 5)
+
+- **Helmet** — secure headers (`X-Content-Type-Options`, `X-Frame-Options`,
+  `Strict-Transport-Security`, `Referrer-Policy`) plus a Content-Security-
+  Policy scoped to same-origin scripts/styles and this server's own
+  `/uploads` + streaming endpoint for `img-src`/`media-src`; development
+  relaxes `connect-src` for Vite's dev server/HMR websocket, production does
+  not.
+- **Rate limiting** (`express-rate-limit`, keyed per-account when
+  authenticated, per-IP otherwise) — a generous global limit (300/min) for
+  normal browsing and player heartbeats; a strict limit (10/15min, IP-keyed)
+  on login/register/forgot-password/reset-password; a conservative limit
+  (20/15min) on music/avatar/cover uploads; a moderate limit (60/min) on
+  admin and artist/album/genre mutations; a heartbeat-aware limit (20/min) on
+  the playback progress endpoint specifically, sized for a ~12s heartbeat
+  interval with headroom for multiple tabs. All return a clean `429` JSON
+  body, never a raw error page.
+- **Request size limits** — JSON/urlencoded bodies capped at `100kb`
+  (oversized bodies get a clean `413` through the normal error format, not a
+  raw 500); file uploads still go through Multer's separately-configured
+  size limits.
+- **CORS** — a single configured origin (`CLIENT_URL`), credentials enabled,
+  an explicit method/header allowlist — never a wildcard origin with
+  credentials.
+- **Cookies** — refresh token stays HttpOnly + Secure-in-production +
+  configurable `SameSite`; `env.js` fails production startup if
+  `COOKIE_SECURE` is false, or if `SameSite=None` is set without `Secure`.
+- **CSRF** — the state-changing cookie-authenticated endpoints (refresh,
+  logout) rely on strict CORS + `SameSite` rather than a separate CSRF-token
+  scheme, since the frontend and backend are same-site in every supported
+  deployment shape today; if a genuinely cross-site deployment is ever
+  needed, a real CSRF-token strategy should be added rather than relying on
+  CORS alone.
+- **Environment validation** (`config/env.js`) — fails fast in production if
+  JWT secrets are missing, match the `.env.example` placeholders, are too
+  short, or are identical to each other; if `COOKIE_SECURE` is false; if
+  `DEV_EXPOSE_RESET_LINK` is true; or if `DB_PASSWORD` is the example
+  placeholder.
+- **Logging** — one structured JSON line per request (method, route, status,
+  duration, timestamp) — never headers, cookies, query/body values, or
+  anything that could contain a credential.
+- **Graceful shutdown** — `SIGINT`/`SIGTERM` close the HTTP server and the
+  PostgreSQL pool before exiting; a repeated signal while already shutting
+  down is ignored (not double-processed); a forced-exit timeout guards
+  against a hang during shutdown.
+- **Static file hardening** — only `/uploads/profiles` and `/uploads/covers`
+  are ever mounted with `express.static` (dotfiles denied, directory index
+  disabled); the raw music directory, backend root, `.env`, and database
+  files are never reachable this way — audio only ever leaves through the
+  access-controlled streaming route.
+- **Upload cleanup tooling** — `backend/scripts/cleanupOrphanUploads.js`
+  compares files on disk against database references for music/covers/
+  profiles; dry-run by default, requires an explicit `--delete` flag, and
+  re-validates every candidate path through the same containment check
+  (`utils/mediaFiles.js`) the rest of the app uses before removing anything.
+  Run via `npm run uploads:cleanup` / `npm run uploads:cleanup:delete`.
+
 ## Current Limitations
 
-- No admin UI for publishing songs or managing artists/albums/genres yet —
-  those endpoints exist and are fully functional, but are only reachable
-  via direct API calls until Phase 5's admin dashboard.
 - Recommendations, likes, playlists, and history are per-account personal
   data — there is no public/shared playlist view yet (`playlists.is_public`
   exists in the schema but isn't surfaced by any endpoint or UI).
@@ -578,23 +847,45 @@ listening does not count at all.
   flow yet).
 - Password-reset email delivery requires SMTP configuration; without it,
   reset tokens still work end-to-end but no email is actually sent.
-- No rate limiting on auth or upload endpoints yet.
+- Rate limits are fixed defaults in code, not environment-configurable yet.
+- No production hosting/deployment has been set up — see
+  [Deployment Considerations](#deployment-considerations).
+- CSRF protection relies on strict CORS/SameSite rather than a dedicated
+  CSRF-token scheme (see [Security Hardening](#security-hardening-phase-5))
+  — sufficient for same-site deployment, but worth revisiting if a
+  cross-site frontend/backend split is ever needed.
 
-## Phase 5 (Deferred)
+## Deployment Considerations
 
-Admin dashboard (including a UI for the publish/unpublish and artist/album/
-genre management endpoints that already exist), user administration,
-production deployment, and the Jest/Supertest test suite.
+Not yet configured, but relevant when it is:
+
+- Set `NODE_ENV=production`, real (32+ character, distinct) JWT secrets,
+  `COOKIE_SECURE=true`, and a real `CLIENT_URL` — `config/env.js` fails
+  startup if these are missing or use example placeholders.
+- Set `TRUST_PROXY=true` if deployed behind a reverse proxy/load balancer, so
+  rate limiting and `req.secure` see the real client IP/protocol.
+- PostgreSQL should be a managed/production instance, not the local dev
+  database; run `schema.sql` (fresh install) or the numbered migrations
+  (upgrading) against it directly, the same as local setup.
+- Configure real SMTP credentials for password-reset email delivery, or
+  password-reset tokens will still work end-to-end but no email will send.
+- Serve the frontend's production build (`npm run build` → `frontend/dist`)
+  from a static host/CDN; it talks to the backend purely over
+  `VITE_API_BASE_URL`, so the two can be hosted separately.
+- Run `backend/scripts/cleanupOrphanUploads.js` periodically (dry-run first)
+  if uploads live on a persistent disk that isn't otherwise garbage-collected.
 
 ## Testing Plan
 
-Jest and Supertest are still deferred until the full feature set exists. The
-backend's `app.js`/`server.js` split (the Express app is exported without
+Jest and Supertest are the one piece intentionally deferred to a dedicated
+testing phase after Phase 5 — that phase will add an isolated test database
+and real API integration tests; **neither package was added during Phase 5**.
+The backend's `app.js`/`server.js` split (the Express app is exported without
 calling `.listen()`) exists specifically so Supertest can import `app.js`
-directly once the test suite is added. Pagination, range-parsing, and
-catalog-mapping logic were written as small pure functions
-(`utils/pagination.js`, `utils/rangeParser.js`, `utils/catalogMapper.js`)
-specifically to be easy to unit test later without needing a database.
+directly once the test suite is added. Pagination, range-parsing,
+catalog-mapping, playback-qualification, recommendation-ranking, and queue
+logic were all written as small pure functions specifically to be easy to
+unit test later without needing a database or a browser.
 
 ## No-ORM Statement
 

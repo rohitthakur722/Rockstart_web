@@ -68,6 +68,53 @@ const revokeAllForUser = async (userId, client) => {
   );
 };
 
+// Backs GET /api/users/me/sessions — only ever the current user's own
+// still-active sessions (uses the partial index from migration 004).
+// token_hash is selected only so the service layer can privately determine
+// which row is the caller's current session — it must never be included in
+// any API response, and the service layer strips it before mapping out.
+const findActiveSessionsByUser = async (userId) => {
+  const result = await query(
+    `SELECT id, expires_at, user_agent, ip_address, created_at, token_hash
+     FROM refresh_tokens
+     WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW()
+     ORDER BY created_at DESC`,
+    [userId]
+  );
+  return result.rows;
+};
+
+// Ownership-scoped lookup for DELETE /me/sessions/:sessionId — a user can
+// only ever see/revoke their own session rows.
+const findActiveByIdForUser = async (id, userId) => {
+  const result = await query(
+    `SELECT id FROM refresh_tokens WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL`,
+    [id, userId]
+  );
+  return result.rows[0] || null;
+};
+
+const revokeByIdForUser = async (id, userId) => {
+  const result = await query(
+    `UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL RETURNING id`,
+    [id, userId]
+  );
+  return result.rows.length > 0;
+};
+
+// Revokes every active session for a user except one (the caller's current
+// session, identified by its token hash) — backs "sign out other sessions".
+const revokeAllForUserExceptHash = async (userId, currentTokenHash) => {
+  const result = await query(
+    `UPDATE refresh_tokens
+     SET revoked_at = NOW()
+     WHERE user_id = $1 AND revoked_at IS NULL AND token_hash != $2
+     RETURNING id`,
+    [userId, currentTokenHash]
+  );
+  return result.rows.length;
+};
+
 module.exports = {
   createRefreshToken,
   findByHash,
@@ -76,4 +123,8 @@ module.exports = {
   claimForRotation,
   setReplacedBy,
   revokeAllForUser,
+  findActiveSessionsByUser,
+  findActiveByIdForUser,
+  revokeByIdForUser,
+  revokeAllForUserExceptHash,
 };

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { usePlayer } from "../../hooks/usePlayer";
+import { usePreferences } from "../../hooks/usePreferences";
 import { PlayerArtwork } from "./PlayerArtwork";
 import { PlayerControls } from "./PlayerControls";
 import { PlaybackProgress } from "./PlaybackProgress";
@@ -22,6 +23,7 @@ const isTypingTarget = (target) => {
 export function PlayerBar() {
   const player = usePlayer();
   const navigate = useNavigate();
+  const { preferences } = usePreferences();
   const {
     currentSong,
     isPlaying,
@@ -54,7 +56,7 @@ export function PlayerBar() {
   } = player;
 
   useEffect(() => {
-    if (!currentSong) return undefined;
+    if (!currentSong || !preferences.keyboardShortcutsEnabled) return undefined;
 
     const handleKeyDown = (event) => {
       if (isTypingTarget(event.target)) return;
@@ -99,7 +101,19 @@ export function PlayerBar() {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [currentSong, currentTime, duration, volume, togglePlayPause, seek, setVolume, toggleMute, next, previous]);
+  }, [
+    currentSong,
+    currentTime,
+    duration,
+    volume,
+    togglePlayPause,
+    seek,
+    setVolume,
+    toggleMute,
+    next,
+    previous,
+    preferences.keyboardShortcutsEnabled,
+  ]);
 
   if (!currentSong) return null;
 

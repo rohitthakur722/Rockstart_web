@@ -1,10 +1,12 @@
 import { useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import { cn } from "../../utils/cn";
-import { CloseIcon, MusicNoteIcon } from "../common/icons";
+import { CloseIcon, MusicNoteIcon, ShieldIcon } from "../common/icons";
+import { useAuth } from "../../hooks/useAuth";
 import { NAV_ITEMS } from "./navigationItems";
 
 export function MobileNavigation({ open, onClose }) {
+  const { user } = useAuth();
   useEffect(() => {
     if (!open) return undefined;
 
@@ -73,6 +75,27 @@ export function MobileNavigation({ open, onClose }) {
               <span>{label}</span>
             </NavLink>
           ))}
+          {user?.role === "admin" && (
+            <>
+              <div className="my-2 border-t border-rockstar-border" role="separator" />
+              <NavLink
+                to="/admin"
+                onClick={onClose}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 rounded-[var(--radius-field)] px-3.5 py-3 text-sm font-medium transition-colors duration-150",
+                    "focus-visible:outline-2 focus-visible:outline-rockstar-tan focus-visible:outline-offset-2",
+                    isActive
+                      ? "bg-rockstar-surface-elevated text-rockstar-tan-light"
+                      : "text-rockstar-text-secondary hover:bg-rockstar-surface hover:text-rockstar-text-primary"
+                  )
+                }
+              >
+                <ShieldIcon aria-hidden="true" />
+                <span>Admin</span>
+              </NavLink>
+            </>
+          )}
         </div>
       </nav>
     </div>

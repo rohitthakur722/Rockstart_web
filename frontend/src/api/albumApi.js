@@ -4,3 +4,10 @@ export const listAlbums = (params, config = {}) =>
   axiosInstance.get("/albums", { params, ...config }).then((res) => res.data);
 
 export const getAlbum = (albumId) => axiosInstance.get(`/albums/${albumId}`).then((res) => res.data);
+
+export const createAlbum = (payload) => axiosInstance.post("/albums", payload).then((res) => res.data);
+
+export const updateAlbum = (albumId, payload) =>
+  axiosInstance.patch(`/albums/${albumId}`, payload).then((res) => res.data);
+
+export const deleteAlbum = (albumId) => axiosInstance.delete(`/albums/${albumId}`).then((res) => res.data);

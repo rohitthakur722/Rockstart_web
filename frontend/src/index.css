@@ -1,7 +1,10 @@
 @import "tailwindcss";
 
 @theme {
-  /* Rockstar brand colors */
+  /* Rockstar brand colors — dark theme values (the default; overridden per
+     variable below for [data-theme="light"]). Referenced as CSS custom
+     properties, so switching data-theme repaints every consumer instantly
+     without a rebuild or a second class variant per component. */
   --color-rockstar-black: #090909;
   --color-rockstar-background: #0d0d0d;
   --color-rockstar-surface: #171717;
@@ -14,6 +17,15 @@
   --color-rockstar-border: #34302b;
   --color-rockstar-error: #e57373;
   --color-rockstar-success: #79b791;
+
+  /* Gradient/atmosphere stops — also swapped per theme so decorative
+     surfaces never look like a dark leftover in light mode. */
+  --color-rockstar-gradient-start: #dfc49e;
+  --color-rockstar-gradient-mid: #c7a77a;
+  --color-rockstar-gradient-end: #9b7b52;
+  --color-rockstar-atmosphere-start: #24201a;
+  --color-rockstar-atmosphere-mid: #11100e;
+  --color-rockstar-atmosphere-end: #090909;
 
   /* Typography */
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -31,13 +43,51 @@
   --default-transition-duration: 180ms;
 }
 
+/* Light theme — same warm tan/gold brand accent, inverted surface hierarchy:
+   warm off-white background, clean white cards, dark warm-brown text. Applied
+   via the [data-theme="light"] attribute set on <html> (see index.html's
+   pre-paint script and PreferenceProvider) — never relies on a rebuild. */
+:root[data-theme="light"] {
+  --color-rockstar-black: #fffdf9;
+  --color-rockstar-background: #f5efe4;
+  --color-rockstar-surface: #ffffff;
+  --color-rockstar-surface-elevated: #fbf6ec;
+  --color-rockstar-tan: #9c6f3f;
+  --color-rockstar-tan-light: #c7a77a;
+  --color-rockstar-tan-dark: #7a5530;
+  --color-rockstar-text-primary: #241f19;
+  --color-rockstar-text-secondary: #6b6259;
+  --color-rockstar-border: #e4dccc;
+  --color-rockstar-error: #c0392b;
+  --color-rockstar-success: #2f7a4f;
+  --color-rockstar-atmosphere-start: #f0e6d2;
+  --color-rockstar-atmosphere-mid: #f7f2e8;
+  --color-rockstar-atmosphere-end: #fffdf9;
+}
+
+/* Compact layout — a real, visible density change (narrower sidebar,
+   shorter top bar) driven by the same shared layout variables every
+   component already consumes, rather than a per-component prop. */
+html[data-compact="true"] {
+  --width-sidebar: 224px;
+  --height-topbar: 56px;
+}
+
 @layer base {
   * {
     border-color: var(--color-rockstar-border);
   }
 
   html {
+    color-scheme: dark light;
+  }
+
+  html[data-theme="dark"] {
     color-scheme: dark;
+  }
+
+  html[data-theme="light"] {
+    color-scheme: light;
   }
 
   body {
@@ -47,6 +97,7 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    transition: background-color 150ms ease, color 150ms ease;
   }
 
   #root {
@@ -63,21 +114,48 @@
     outline-offset: 2px;
     border-radius: 4px;
   }
+
+  /* Respects the user's reduced-motion preference (system default, or an
+     explicit override applied as the same data attribute pattern as theme)
+     by collapsing every transition/animation to effectively instant. */
+  html[data-reduce-motion="true"] *,
+  html[data-reduce-motion="true"] *::before,
+  html[data-reduce-motion="true"] *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 @utility bg-rockstar-gradient {
-  background-image: linear-gradient(135deg, #dfc49e 0%, #c7a77a 45%, #9b7b52 100%);
+  background-image: linear-gradient(
+    135deg,
+    var(--color-rockstar-gradient-start) 0%,
+    var(--color-rockstar-gradient-mid) 45%,
+    var(--color-rockstar-gradient-end) 100%
+  );
 }
 
 @utility text-rockstar-gradient {
-  background-image: linear-gradient(135deg, #dfc49e 0%, #c7a77a 45%, #9b7b52 100%);
+  background-image: linear-gradient(
+    135deg,
+    var(--color-rockstar-gradient-start) 0%,
+    var(--color-rockstar-gradient-mid) 45%,
+    var(--color-rockstar-gradient-end) 100%
+  );
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
 }
 
 @utility bg-rockstar-atmosphere {
-  background-image: radial-gradient(circle at top, #24201a 0%, #11100e 38%, #090909 100%);
+  background-image: radial-gradient(
+    circle at top,
+    var(--color-rockstar-atmosphere-start) 0%,
+    var(--color-rockstar-atmosphere-mid) 38%,
+    var(--color-rockstar-atmosphere-end) 100%
+  );
 }
 
 @utility scrollbar-rockstar {

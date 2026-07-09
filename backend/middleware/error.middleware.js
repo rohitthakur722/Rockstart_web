@@ -14,6 +14,10 @@ const normalizeError = (err) => {
     return new AppError("Malformed JSON in request body.", 400);
   }
 
+  if (err.type === "entity.too.large") {
+    return new AppError("Request body is too large.", 413);
+  }
+
   if (err.code && POSTGRES_ERROR_MESSAGES[err.code]) {
     return new AppError(POSTGRES_ERROR_MESSAGES[err.code], 409);
   }

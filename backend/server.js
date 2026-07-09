@@ -7,6 +7,8 @@ const { checkConnection, closePool } = require("./config/db");
 const PORT = process.env.PORT || 5000;
 
 let server;
+let shuttingDown = false;
+const FORCED_SHUTDOWN_TIMEOUT_MS = 10_000;
 
 const start = async () => {
   try {
@@ -29,15 +31,32 @@ const start = async () => {
 };
 
 const shutdown = async (signal) => {
+  if (shuttingDown) {
+    console.log(`[shutdown] Received ${signal} again while already shutting down — ignoring.`);
+    return;
+  }
+  shuttingDown = true;
   console.log(`[shutdown] Received ${signal}. Closing server gracefully...`);
 
-  if (server) {
-    await new Promise((resolve) => server.close(resolve));
-  }
+  const forceExitTimer = setTimeout(() => {
+    console.error(`[shutdown] Graceful shutdown exceeded ${FORCED_SHUTDOWN_TIMEOUT_MS}ms — forcing exit.`);
+    process.exit(1);
+  }, FORCED_SHUTDOWN_TIMEOUT_MS);
+  forceExitTimer.unref();
 
-  await closePool();
-  console.log("[shutdown] Server and database pool closed.");
-  process.exit(0);
+  try {
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+    }
+    await closePool();
+    console.log("[shutdown] Server and database pool closed.");
+    clearTimeout(forceExitTimer);
+    process.exit(0);
+  } catch (err) {
+    console.error("[shutdown] Error during shutdown:", err.message);
+    clearTimeout(forceExitTimer);
+    process.exit(1);
+  }
 };
 
 process.on("SIGINT", () => shutdown("SIGINT"));

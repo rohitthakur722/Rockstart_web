@@ -38,6 +38,14 @@ const mapSong = (row, { viewer = null } = {}) => {
     song.isOwner = Boolean(isOwner);
   }
 
+  // Only present on admin-listing queries (song.model.js's findAdminList),
+  // and only meaningful to an admin viewer.
+  if (isAdmin && row.uploader_full_name !== undefined) {
+    song.uploader = row.uploaded_by
+      ? { id: row.uploaded_by, fullName: row.uploader_full_name, username: row.uploader_username }
+      : null;
+  }
+
   return song;
 };
 

@@ -1,4 +1,4 @@
--- Rockstar Music Player -- Normalized PostgreSQL schema (Phase 1 foundation)
+-- Rockstar Music Player -- Normalized PostgreSQL schema (Phases 1-5)
 -- Applies cleanly to a fresh database: psql -d rockstar -f database/schema.sql
 
 BEGIN;
@@ -223,5 +223,49 @@ CREATE UNIQUE INDEX IF NOT EXISTS playback_history_session_token_key
 CREATE INDEX IF NOT EXISTS playback_history_user_played_at_idx ON playback_history (user_id, played_at DESC);
 CREATE INDEX IF NOT EXISTS playback_history_user_song_played_at_idx ON playback_history (user_id, song_id, played_at DESC);
 CREATE INDEX IF NOT EXISTS playback_history_qualified_idx ON playback_history (user_id, qualified_at DESC) WHERE qualified_at IS NOT NULL;
+
+-- ============================================================
+-- user_preferences (Phase 5: settings)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_preferences (
+  user_id BIGINT PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+  theme_preference VARCHAR(10) NOT NULL DEFAULT 'system' CHECK (theme_preference IN ('system', 'dark', 'light')),
+  reduce_motion BOOLEAN NOT NULL DEFAULT FALSE,
+  compact_layout BOOLEAN NOT NULL DEFAULT FALSE,
+  autoplay_next BOOLEAN NOT NULL DEFAULT TRUE,
+  remember_player_state BOOLEAN NOT NULL DEFAULT TRUE,
+  keyboard_shortcuts_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
+-- admin_audit_logs (Phase 5: administrative action history)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS admin_audit_logs (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  admin_user_id BIGINT REFERENCES users (id) ON DELETE SET NULL,
+  action VARCHAR(60) NOT NULL,
+  target_type VARCHAR(40) NOT NULL,
+  target_id VARCHAR(60),
+  metadata JSONB,
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS admin_audit_logs_created_at_idx ON admin_audit_logs (created_at DESC);
+CREATE INDEX IF NOT EXISTS admin_audit_logs_admin_user_id_idx ON admin_audit_logs (admin_user_id);
+CREATE INDEX IF NOT EXISTS admin_audit_logs_target_idx ON admin_audit_logs (target_type, target_id);
+
+-- ============================================================
+-- Phase 5: additional indexes for admin listing/filtering
+-- ============================================================
+CREATE INDEX IF NOT EXISTS users_role_is_active_idx ON users (role, is_active);
+CREATE INDEX IF NOT EXISTS users_created_at_idx ON users (created_at DESC);
+CREATE INDEX IF NOT EXISTS songs_is_published_created_at_idx ON songs (is_published, created_at DESC);
+CREATE INDEX IF NOT EXISTS songs_uploaded_by_is_published_idx ON songs (uploaded_by, is_published);
+CREATE INDEX IF NOT EXISTS refresh_tokens_active_by_user_idx
+  ON refresh_tokens (user_id, expires_at DESC) WHERE revoked_at IS NULL;
 
 COMMIT;

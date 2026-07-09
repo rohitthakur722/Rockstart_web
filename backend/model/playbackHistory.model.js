@@ -163,6 +163,17 @@ const getMostPlayedSongs = async (userId, limit) => {
   return result.rows;
 };
 
+// Platform-wide equivalent of getSummaryStats — backs the admin dashboard.
+const getPlatformSummaryStats = async () => {
+  const result = await query(
+    `SELECT
+       COUNT(*) FILTER (WHERE qualified_at IS NOT NULL) AS total_qualified_plays,
+       COALESCE(SUM(listened_seconds) FILTER (WHERE qualified_at IS NOT NULL), 0) AS total_listened_seconds
+     FROM playback_history`
+  );
+  return result.rows[0];
+};
+
 const deleteAllForUser = async (userId) => {
   await query("DELETE FROM playback_history WHERE user_id = $1", [userId]);
 };
@@ -207,6 +218,7 @@ module.exports = {
   getTopArtist,
   getTopAlbum,
   getMostPlayedSongs,
+  getPlatformSummaryStats,
   deleteAllForUser,
   findRecentPlayedArtistAlbumIds,
   findRecentlyPlayedSongIds,

@@ -2,6 +2,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const { sendSuccess } = require("../utils/apiResponse");
 const AppError = require("../utils/AppError");
 const artistService = require("../service/artist.service");
+const adminAuditService = require("../service/adminAudit.service");
 
 const isNonEmptyString = (value) => typeof value === "string" && value.trim().length > 0;
 
@@ -40,6 +41,14 @@ const create = asyncHandler(async (req, res) => {
   if (errors.length > 0) throw new AppError("Please fix the highlighted fields.", 400, errors);
 
   const artist = await artistService.createArtist(values);
+
+  await adminAuditService.recordAction(req, {
+    action: "artist_created",
+    targetType: "artist",
+    targetId: artist.id,
+    metadata: { name: artist.name },
+  });
+
   return sendSuccess(res, { statusCode: 201, message: "Artist created.", data: { artist } });
 });
 
@@ -51,11 +60,26 @@ const update = asyncHandler(async (req, res) => {
   if (errors.length > 0) throw new AppError("Please fix the highlighted fields.", 400, errors);
 
   const artist = await artistService.updateArtist(req.params.artistId, values);
+
+  await adminAuditService.recordAction(req, {
+    action: "artist_updated",
+    targetType: "artist",
+    targetId: req.params.artistId,
+    metadata: { name: artist.name },
+  });
+
   return sendSuccess(res, { message: "Artist updated.", data: { artist } });
 });
 
 const remove = asyncHandler(async (req, res) => {
   await artistService.deleteArtist(req.params.artistId);
+
+  await adminAuditService.recordAction(req, {
+    action: "artist_deleted",
+    targetType: "artist",
+    targetId: req.params.artistId,
+  });
+
   return sendSuccess(res, { message: "Artist deleted." });
 });
 

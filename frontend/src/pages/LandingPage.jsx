@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Button } from "../components/common/Button";
 import { HeartIcon, LibraryIcon, MusicNoteIcon, PlaylistIcon } from "../components/common/icons";
 import { useAuth } from "../hooks/useAuth";
+import { useAppVersion } from "../hooks/useAppVersion";
 
 const FEATURES = [
   {
@@ -23,6 +24,7 @@ const FEATURES = [
 
 export default function LandingPage() {
   const { isAuthenticated } = useAuth();
+  const versionInfo = useAppVersion();
 
   return (
     <div className="min-h-svh bg-rockstar-atmosphere">
@@ -87,8 +89,8 @@ export default function LandingPage() {
             <div className="relative flex h-full w-full flex-col justify-end gap-4 overflow-hidden rounded-[var(--radius-card)] border border-rockstar-border bg-rockstar-surface p-6">
               <div className="flex-1 rounded-[calc(var(--radius-card)-8px)] bg-rockstar-atmosphere" />
               <div className="space-y-1">
-                <p className="text-sm font-medium text-rockstar-text-primary">Now building your library</p>
-                <p className="text-xs text-rockstar-text-secondary">Accounts are live — music uploads are next</p>
+                <p className="text-sm font-medium text-rockstar-text-primary">Now playing, wherever you left off</p>
+                <p className="text-xs text-rockstar-text-secondary">Catalog, uploads, playlists, and history — all live</p>
               </div>
             </div>
           </div>
@@ -113,7 +115,7 @@ export default function LandingPage() {
       </main>
 
       <footer className="border-t border-rockstar-border px-4 py-8 text-center text-xs text-rockstar-text-secondary sm:px-8">
-        Rockstar &middot; v1.0.0
+        Rockstar {versionInfo ? `· v${versionInfo.version}` : ""}
       </footer>
     </div>
   );

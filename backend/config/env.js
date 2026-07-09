@@ -30,6 +30,8 @@ const EXAMPLE_SECRET_VALUES = new Set([
   "replace_with_a_different_long_random_secret",
 ]);
 
+const EXAMPLE_PASSWORD_VALUES = new Set(["your_postgres_password"]);
+
 const VALID_SAME_SITE = new Set(["lax", "strict", "none"]);
 
 const MIN_SECRET_LENGTH = 32;
@@ -87,6 +89,10 @@ const validateEnv = () => {
 
   if (isProduction && !cookieSecure) {
     errors.push("COOKIE_SECURE must be true when NODE_ENV=production.");
+  }
+
+  if (isProduction && EXAMPLE_PASSWORD_VALUES.has(process.env.DB_PASSWORD)) {
+    errors.push("DB_PASSWORD must not use the .env.example placeholder value.");
   }
 
   const resetExpiresMinutes = Number(process.env.PASSWORD_RESET_EXPIRES_MINUTES);

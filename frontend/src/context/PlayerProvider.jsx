@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
+import { usePreferences } from "../hooks/usePreferences";
 import * as playbackApi from "../api/playbackApi";
 import { buildMediaUrl } from "../utils/mediaUrl";
 import { getAccessToken } from "../services/authTokenStore";
@@ -43,6 +44,8 @@ export function PlayerProvider({ children }) {
   const { user, isAuthenticated } = useAuth();
   const userId = user?.id ?? null;
   const scope = isAuthenticated && userId ? String(userId) : null;
+  const { preferences } = usePreferences();
+  const { autoplayNext, rememberPlayerState } = preferences;
 
   const audioRef = useRef(null);
   const queueStateRef = useRef(emptyQueueState);
@@ -55,6 +58,7 @@ export function PlayerProvider({ children }) {
   const heartbeatTimerRef = useRef(null);
   const persistTimerRef = useRef(null);
   const previousScopeRef = useRef(null);
+  const autoplayNextRef = useRef(autoplayNext);
 
   const [queueState, setQueueStateRaw] = useState(emptyQueueState);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -84,6 +88,12 @@ export function PlayerProvider({ children }) {
     repeatModeRef.current = mode;
     setRepeatModeState(mode);
   }, []);
+
+  // Kept in a ref so the mount-once `ended` handler always reads the current
+  // preference without needing to be re-registered on every change.
+  useEffect(() => {
+    autoplayNextRef.current = autoplayNext;
+  }, [autoplayNext]);
 
   // Render-time reset the instant the signed-in scope changes (logout, or a
   // different account signing in) — a plain derived-state adjustment rather
@@ -475,6 +485,12 @@ export function PlayerProvider({ children }) {
         return;
       }
       endActiveSession(true);
+      // With autoplay-next off, natural completion always stops (regardless
+      // of repeat-all/off) — manual Next/Previous still work normally.
+      if (!autoplayNextRef.current) {
+        setIsPlaying(false);
+        return;
+      }
       const nextIndex = getNextIndex({ currentIndex, length: items.length, repeatMode: repeatModeRef.current });
       if (nextIndex === null) {
         setIsPlaying(false);
@@ -581,6 +597,13 @@ export function PlayerProvider({ children }) {
   useEffect(() => {
     if (!userId) return undefined;
 
+    if (!rememberPlayerState) {
+      // Disabling the preference clears whatever was already saved and
+      // stops writing new restoration data — it doesn't linger stale.
+      clearPlayerState(userId);
+      return undefined;
+    }
+
     const persist = () => {
       if (queueStateRef.current.items.length === 0) return;
       savePlayerState(userId, {
@@ -596,7 +619,7 @@ export function PlayerProvider({ children }) {
 
     persistTimerRef.current = setInterval(persist, PERSIST_INTERVAL_MS);
     return () => clearInterval(persistTimerRef.current);
-  }, [userId, volume, isMuted, shuffleEnabled, repeatMode]);
+  }, [userId, volume, isMuted, shuffleEnabled, repeatMode, rememberPlayerState]);
 
   // --- Best-effort final update on tab close/hide ---------------------------
 

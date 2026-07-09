@@ -233,3 +233,49 @@ export const ClockIcon = (props) => (
     <path d="M12 7.5V12l3 2" />
   </svg>
 );
+
+export const ShieldIcon = (props) => (
+  <svg {...base} {...props} aria-hidden="true">
+    <path d="M12 3.5 19 6.5v5.5c0 4.5-3 7.5-7 8.5-4-1-7-4-7-8.5V6.5L12 3.5Z" />
+    <path d="M9 12l2 2 4-4.5" />
+  </svg>
+);
+
+export const UsersIcon = (props) => (
+  <svg {...base} {...props} aria-hidden="true">
+    <circle cx="9" cy="8" r="3" />
+    <path d="M2.5 19a6.5 6.5 0 0 1 13 0" />
+    <path d="M16 6.2a3 3 0 0 1 0 5.8M21.5 19a5.5 5.5 0 0 0-4.5-5.4" />
+  </svg>
+);
+
+export const ClipboardIcon = (props) => (
+  <svg {...base} {...props} aria-hidden="true">
+    <rect x="5" y="4.5" width="14" height="16" rx="1.5" />
+    <rect x="9" y="3" width="6" height="3" rx="1" />
+    <path d="M8.5 11h7M8.5 14.5h7M8.5 18h4" />
+  </svg>
+);
+
+export const GridIcon = (props) => (
+  <svg {...base} {...props} aria-hidden="true">
+    <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.2" />
+    <rect x="13" y="3.5" width="7.5" height="7.5" rx="1.2" />
+    <rect x="3.5" y="13" width="7.5" height="7.5" rx="1.2" />
+    <rect x="13" y="13" width="7.5" height="7.5" rx="1.2" />
+  </svg>
+);
+
+export const AlbumIcon = (props) => (
+  <svg {...base} {...props} aria-hidden="true">
+    <circle cx="12" cy="12" r="8.5" />
+    <circle cx="12" cy="12" r="2.5" />
+  </svg>
+);
+
+export const TagIcon = (props) => (
+  <svg {...base} {...props} aria-hidden="true">
+    <path d="M11.5 3.5H5a1.5 1.5 0 0 0-1.5 1.5v6.5L12 20l8.5-8.5Z" />
+    <circle cx="8" cy="8" r="1.4" />
+  </svg>
+);

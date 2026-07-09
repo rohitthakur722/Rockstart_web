@@ -2,6 +2,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const { sendSuccess } = require("../utils/apiResponse");
 const AppError = require("../utils/AppError");
 const albumService = require("../service/album.service");
+const adminAuditService = require("../service/adminAudit.service");
 
 const isNonEmptyString = (value) => typeof value === "string" && value.trim().length > 0;
 
@@ -62,6 +63,14 @@ const create = asyncHandler(async (req, res) => {
   if (errors.length > 0) throw new AppError("Please fix the highlighted fields.", 400, errors);
 
   const album = await albumService.createAlbum(values);
+
+  await adminAuditService.recordAction(req, {
+    action: "album_created",
+    targetType: "album",
+    targetId: album.id,
+    metadata: { title: album.title },
+  });
+
   return sendSuccess(res, { statusCode: 201, message: "Album created.", data: { album } });
 });
 
@@ -70,11 +79,26 @@ const update = asyncHandler(async (req, res) => {
   if (errors.length > 0) throw new AppError("Please fix the highlighted fields.", 400, errors);
 
   const album = await albumService.updateAlbum(req.params.albumId, values);
+
+  await adminAuditService.recordAction(req, {
+    action: "album_updated",
+    targetType: "album",
+    targetId: req.params.albumId,
+    metadata: { title: album.title },
+  });
+
   return sendSuccess(res, { message: "Album updated.", data: { album } });
 });
 
 const remove = asyncHandler(async (req, res) => {
   await albumService.deleteAlbum(req.params.albumId);
+
+  await adminAuditService.recordAction(req, {
+    action: "album_deleted",
+    targetType: "album",
+    targetId: req.params.albumId,
+  });
+
   return sendSuccess(res, { message: "Album deleted." });
 });
 
