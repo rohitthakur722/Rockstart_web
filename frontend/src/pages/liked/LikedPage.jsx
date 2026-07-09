@@ -47,17 +47,12 @@ export default function LikedPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.search, params.page, refreshIndex]);
 
-  // Unliking a song from this page should remove it from view immediately.
-  useEffect(() => {
-    setResult((prev) => {
-      if (prev.status !== "success") return prev;
-      const stillLiked = prev.items.filter((song) => likedSongIds.has(String(song.id)));
-      if (stillLiked.length === prev.items.length) return prev;
-      return { ...prev, items: stillLiked };
-    });
-  }, [likedSongIds]);
-
   const isLoading = result.key !== requestKeyFor(params, refreshIndex);
+
+  // Unliking a song from this page removes it from view immediately, derived
+  // at render time rather than synced back into state via an effect.
+  const visibleItems =
+    result.status === "success" ? result.items.filter((song) => likedSongIds.has(String(song.id))) : result.items;
 
   return (
     <div className="space-y-6">
@@ -93,7 +88,7 @@ export default function LikedPage() {
         <ErrorState message={result.error} onRetry={() => setRefreshIndex((i) => i + 1)} />
       )}
 
-      {!isLoading && result.status === "success" && result.items.length === 0 && (
+      {!isLoading && result.status === "success" && visibleItems.length === 0 && (
         <EmptyState
           icon={HeartIcon}
           title={params.search ? "No liked songs match your search" : "No liked songs yet"}
@@ -105,11 +100,11 @@ export default function LikedPage() {
         />
       )}
 
-      {!isLoading && result.status === "success" && result.items.length > 0 && (
+      {!isLoading && result.status === "success" && visibleItems.length > 0 && (
         <div className="space-y-4">
           <div className="space-y-1">
-            {result.items.map((song, index) => (
-              <SongRow key={song.id} song={song} onPlay={() => playQueue(result.items, index)} />
+            {visibleItems.map((song, index) => (
+              <SongRow key={song.id} song={song} onPlay={() => playQueue(visibleItems, index)} />
             ))}
           </div>
           <Pagination pagination={result.pagination} onPageChange={setPage} />

@@ -11,23 +11,23 @@ import { extractErrorMessage } from "../../api/axiosInstance";
 export function AddToPlaylistModal({ open, onClose, song }) {
   const { playlists, playlistsLoading, refreshPlaylists } = usePersonalLibrary();
   const [membership, setMembership] = useState({}); // playlistId -> boolean
-  const [membershipLoading, setMembershipLoading] = useState(false);
+  const [resolvedKey, setResolvedKey] = useState(null);
   const [pendingId, setPendingId] = useState(null);
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
 
-  useEffect(() => {
-    if (!open || !song || playlists.length === 0) {
-      setMembership({});
-      return undefined;
-    }
+  // The playlist summary list doesn't carry per-song membership, so it's
+  // resolved here — bounded by how many playlists the user has, never by
+  // catalog size. requestKey is null whenever there is nothing to resolve;
+  // membershipLoading is derived by comparing it against what was last
+  // resolved, so no state is ever reset synchronously inside the effect.
+  const requestKey = open && song && playlists.length > 0 ? String(song.id) : null;
+  const membershipLoading = requestKey !== null && resolvedKey !== requestKey;
 
-    // The playlist summary list doesn't carry per-song membership, so it's
-    // resolved here — bounded by how many playlists the user has, never by
-    // catalog size.
+  useEffect(() => {
+    if (requestKey === null) return undefined;
     let cancelled = false;
-    setError("");
-    setMembershipLoading(true);
+    const songId = song.id;
 
     Promise.all(playlists.map((playlist) => playlistApi.getPlaylist(playlist.id)))
       .then((responses) => {
@@ -35,21 +35,20 @@ export function AddToPlaylistModal({ open, onClose, song }) {
         const next = {};
         responses.forEach((res, i) => {
           const playlistId = playlists[i].id;
-          next[playlistId] = res.data.playlist.songs.some((s) => String(s.id) === String(song.id));
+          next[playlistId] = res.data.playlist.songs.some((s) => String(s.id) === String(songId));
         });
         setMembership(next);
+        setResolvedKey(requestKey);
+        setError("");
       })
       .catch((err) => {
         if (!cancelled) setError(extractErrorMessage(err));
-      })
-      .finally(() => {
-        if (!cancelled) setMembershipLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [open, song, playlists]);
+  }, [requestKey, playlists, song]);
 
   if (!song) return null;
 

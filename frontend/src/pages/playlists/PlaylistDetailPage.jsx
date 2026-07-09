@@ -225,6 +225,7 @@ export default function PlaylistDetailPage() {
       </section>
 
       <EditPlaylistModal
+        key={editOpen ? `edit-${playlist.id}` : "edit-closed"}
         open={editOpen}
         onClose={() => setEditOpen(false)}
         playlist={playlist}
@@ -236,6 +237,7 @@ export default function PlaylistDetailPage() {
       />
 
       <AddSongsModal
+        key={addSongsOpen ? `add-${playlist.id}` : "add-closed"}
         open={addSongsOpen}
         onClose={() => setAddSongsOpen(false)}
         playlist={playlist}
@@ -266,15 +268,6 @@ function EditPlaylistModal({ open, onClose, playlist, onSaved }) {
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (open) {
-      setName(playlist.name);
-      setDescription(playlist.description || "");
-      setErrors({});
-      setServerError("");
-    }
-  }, [open, playlist]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -335,32 +328,23 @@ function AddSongsModal({ open, onClose, playlist, onSongAdded }) {
   const [searchInput, setSearchInput] = useState("");
   const debouncedSearch = useDebouncedValue(searchInput, 350);
   const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [resolvedSearch, setResolvedSearch] = useState(null);
   const [error, setError] = useState("");
   const [pendingId, setPendingId] = useState(null);
-  const [addedIds, setAddedIds] = useState(() => new Set());
-
-  useEffect(() => {
-    if (open) {
-      setAddedIds(new Set(playlist.songs.map((song) => String(song.id))));
-      setSearchInput("");
-      setResults([]);
-      setError("");
-    }
-  }, [open, playlist]);
+  const [addedIds, setAddedIds] = useState(() => new Set(playlist.songs.map((song) => String(song.id))));
+  const loading = open && resolvedSearch !== debouncedSearch;
 
   useEffect(() => {
     if (!open) return undefined;
     const controller = new AbortController();
-    setLoading(true);
     songApi
       .listSongs({ search: debouncedSearch || undefined, sort: "title", order: "asc", limit: 20 }, { signal: controller.signal })
-      .then((res) => setResults(res.data.items))
+      .then((res) => {
+        setResults(res.data.items);
+        setResolvedSearch(debouncedSearch);
+      })
       .catch((err) => {
         if (!controller.signal.aborted) setError(extractErrorMessage(err));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
   }, [open, debouncedSearch]);

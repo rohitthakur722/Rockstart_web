@@ -22,21 +22,21 @@ const formatListenedTime = (totalSeconds) => {
 
 export default function HistoryPage() {
   const { playQueue } = usePlayer();
-  const [state, setState] = useState({ status: "loading", items: [], stats: null, error: "" });
+  const [state, setState] = useState({ key: null, items: [], stats: null, error: "" });
   const [refreshIndex, setRefreshIndex] = useState(0);
   const [clearOpen, setClearOpen] = useState(false);
+  const isLoading = state.key !== refreshIndex;
 
   useEffect(() => {
     let cancelled = false;
-    setState((prev) => ({ ...prev, status: "loading" }));
 
     Promise.all([historyApi.getRecentHistory({ limit: 30 }), historyApi.getHistoryStats()])
       .then(([recentRes, statsRes]) => {
         if (cancelled) return;
-        setState({ status: "success", items: recentRes.data.items, stats: statsRes.data, error: "" });
+        setState({ key: refreshIndex, items: recentRes.data.items, stats: statsRes.data, error: "" });
       })
       .catch((err) => {
-        if (!cancelled) setState({ status: "error", items: [], stats: null, error: extractErrorMessage(err) });
+        if (!cancelled) setState({ key: refreshIndex, items: [], stats: null, error: extractErrorMessage(err) });
       });
 
     return () => {
@@ -64,15 +64,15 @@ export default function HistoryPage() {
         }
       />
 
-      {state.status === "loading" && (
+      {isLoading && (
         <div className="flex justify-center py-12">
           <LoadingSpinner label="Loading history" size="lg" />
         </div>
       )}
 
-      {state.status === "error" && <ErrorState message={state.error} onRetry={() => setRefreshIndex((i) => i + 1)} />}
+      {!isLoading && state.error && <ErrorState message={state.error} onRetry={() => setRefreshIndex((i) => i + 1)} />}
 
-      {state.status === "success" && state.stats && (
+      {!isLoading && !state.error && state.stats && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard label="Qualified plays" value={state.stats.totalQualifiedPlays} />
           <StatCard label="Listening time" value={formatListenedTime(state.stats.totalListenedSeconds)} />
@@ -81,7 +81,7 @@ export default function HistoryPage() {
         </div>
       )}
 
-      {state.status === "success" && state.items.length === 0 && (
+      {!isLoading && !state.error && state.items.length === 0 && (
         <EmptyState
           icon={ClockIcon}
           title="No listening history yet"
@@ -89,7 +89,7 @@ export default function HistoryPage() {
         />
       )}
 
-      {state.status === "success" && state.items.length > 0 && (
+      {!isLoading && !state.error && state.items.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-rockstar-text-secondary">Recently played</h2>
           <div className="space-y-1">
@@ -100,7 +100,7 @@ export default function HistoryPage() {
         </section>
       )}
 
-      {state.status === "success" && state.stats?.mostPlayedSongs?.length > 0 && (
+      {!isLoading && !state.error && state.stats?.mostPlayedSongs?.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-rockstar-text-secondary">Most played</h2>
           <div className="space-y-1">
