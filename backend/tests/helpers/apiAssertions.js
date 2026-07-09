@@ -1,10 +1,3 @@
-/**
- * Shared assertion helpers for the API's common response shapes
- * (middleware/error.middleware.js, utils/apiResponse.js), so individual
- * test files assert intent ("this was a validation error on `email`")
- * instead of re-deriving the envelope shape every time.
- */
-
 const expectSuccess = (response, expectedStatus) => {
   if (expectedStatus !== undefined) {
     expect(response.status).toBe(expectedStatus);

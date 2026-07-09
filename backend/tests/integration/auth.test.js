@@ -154,7 +154,6 @@ describe("POST /api/auth/refresh", () => {
     const originalRefreshCookie = extractCookieValue(registerResponse, REFRESH_COOKIE_NAME);
     expect(originalRefreshCookie).toBeTruthy();
 
-    // First refresh with the original cookie rotates it successfully.
     const firstRefresh = await request(app)
       .post("/api/auth/refresh")
       .set("Cookie", `${REFRESH_COOKIE_NAME}=${originalRefreshCookie}`);
@@ -163,14 +162,11 @@ describe("POST /api/auth/refresh", () => {
     expect(rotatedRefreshCookie).toBeTruthy();
     expect(rotatedRefreshCookie).not.toBe(originalRefreshCookie);
 
-    // Replaying the ORIGINAL (now-rotated-away) cookie is treated as a theft signal.
     const reuseResponse = await request(app)
       .post("/api/auth/refresh")
       .set("Cookie", `${REFRESH_COOKIE_NAME}=${originalRefreshCookie}`);
     expectError(reuseResponse, 401);
 
-    // The reuse should have revoked every session for the user — even the
-    // legitimately-rotated cookie from the first refresh must now be dead.
     const followUpRefresh = await request(app)
       .post("/api/auth/refresh")
       .set("Cookie", `${REFRESH_COOKIE_NAME}=${rotatedRefreshCookie}`);

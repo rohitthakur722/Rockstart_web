@@ -1,10 +1,3 @@
-/**
- * Per-suite upload cleanup. globalTeardown removes the entire test upload
- * root once at the end of the whole run, but suites that upload files
- * (song/avatar/cover tests) should clean up after themselves too, so a
- * failed run doesn't leave hundreds of stray fixtures during local
- * iteration. Only ever touches TEST_UPLOAD_ROOT — never the real uploads/.
- */
 const fs = require("fs");
 const path = require("path");
 
@@ -21,7 +14,6 @@ const resolveTestUploadRoot = () => {
 
 const MEDIA_SUBDIRS = ["music", "covers", "profiles", "playlists"];
 
-/** Removes every generated file under the test upload root's subdirectories, keeping the directories themselves. */
 const cleanupTestUploads = async () => {
   const root = resolveTestUploadRoot();
 

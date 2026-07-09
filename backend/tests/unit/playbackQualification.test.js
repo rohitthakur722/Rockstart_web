@@ -36,7 +36,7 @@ describe("getQualificationThresholdSeconds", () => {
   });
 
   it("rounds up fractional 25% thresholds (ceil)", () => {
-    // 25% of 21 = 5.25 -> ceil to 6, still above the 5s floor.
+
     expect(getQualificationThresholdSeconds(21)).toBe(6);
   });
 });

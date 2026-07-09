@@ -44,7 +44,7 @@ describe("GET /api/users/me/sessions", () => {
       .set("Authorization", `Bearer ${token}`);
 
     const data = expectSuccess(response, 200);
-    // Registration itself creates a session too, so there should be 3 total.
+
     expect(data.sessions.length).toBeGreaterThanOrEqual(3);
   });
 
@@ -105,13 +105,11 @@ describe("POST /api/users/me/sessions/revoke-others", () => {
     const data = expectSuccess(revokeResponse, 200);
     expect(data.revokedCount).toBeGreaterThanOrEqual(1);
 
-    // The first session's refresh token should now be dead...
     const firstRefreshAfter = await request(app)
       .post("/api/auth/refresh")
       .set("Cookie", `${REFRESH_COOKIE_NAME}=${firstRefreshCookie}`);
     expectError(firstRefreshAfter, 401);
 
-    // ...but the current (second) session must still work.
     const secondRefreshAfter = await request(app)
       .post("/api/auth/refresh")
       .set("Cookie", `${REFRESH_COOKIE_NAME}=${secondRefreshCookie}`);

@@ -1,6 +1,5 @@
 const { rankRecommendations, REASON } = require("../../utils/recommendationRanking");
 
-// Matches the shape utils/catalogMapper.js's mapSong() produces.
 const makeSong = ({
   id,
   artistId = null,

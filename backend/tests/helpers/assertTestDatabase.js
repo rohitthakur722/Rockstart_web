@@ -1,15 +1,3 @@
-/**
- * Hard safety guard against ever running destructive test operations
- * (schema reset, truncation, fixture cleanup, teardown) against a real
- * database. Every script/helper that touches the database destructively
- * must call assertTestDatabase() first — including scripts invoked directly
- * via `node`, not only code reached through Jest.
- *
- * This intentionally re-checks everything itself rather than trusting that
- * .env.test was loaded correctly — a wrong .env file, a typo, or running the
- * wrong npm script should all fail loudly here, not truncate someone's real
- * data.
- */
 class UnsafeTestDatabaseError extends Error {
   constructor(message) {
     super(message);

@@ -1,14 +1,3 @@
-/**
- * Direct-SQL test data factories. These bypass the HTTP/service layer for
- * speed and to avoid coupling every integration test's setup to unrelated
- * endpoints (e.g. a playlist test shouldn't fail because registration
- * validation changed). Each factory takes optional overrides, uses
- * parameterized SQL, and returns the inserted record.
- *
- * Uniqueness comes from crypto.randomUUID() per call rather than a shared
- * module-level counter, so factories stay safe under parallel `it()` blocks
- * within a file and never depend on call order.
- */
 const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const { query } = require("../../config/db");
@@ -81,10 +70,6 @@ const createGenre = async (overrides = {}) => {
   return result.rows[0];
 };
 
-// `audioUrl` is a server-managed relative path, never a real uploaded file
-// on disk unless a test explicitly copies one into TEST_UPLOAD_ROOT — most
-// catalog/likes/playlist tests only need the DB row to exist, not a byte-
-// for-byte file, since streaming tests build their own fixtures via testMedia.js.
 const createSong = async (overrides = {}) => {
   const suffix = uniqueSuffix();
   const artist = overrides.artistId ? { id: overrides.artistId } : await createArtist();

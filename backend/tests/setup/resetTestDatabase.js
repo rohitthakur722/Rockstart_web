@@ -1,13 +1,5 @@
 #!/usr/bin/env node
-/**
- * Truncates every application table in rockstar_test (RESTART IDENTITY
- * CASCADE) without recreating the schema. Use this to get a clean slate
- * quickly; use createTestDatabase.js when the database or schema doesn't
- * exist yet.
- *
- * Usage: node tests/setup/resetTestDatabase.js
- * (or: npm run test:db:reset)
- */
+
 const path = require("path");
 const dotenv = require("dotenv");
 

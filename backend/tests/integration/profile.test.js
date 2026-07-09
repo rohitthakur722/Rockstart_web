@@ -137,9 +137,6 @@ describe("PATCH /api/users/me/avatar", () => {
     const data = expectSuccess(uploadResponse, 200);
     expect(data.user.avatarUrl).toMatch(/^\/uploads\/profiles\/.+\.png$/);
 
-    // The static middleware must serve the file from wherever it was
-    // actually written (the test upload root under NODE_ENV=test) — not a
-    // hardcoded real uploads/ path that would never contain it.
     const fileResponse = await request(app).get(data.user.avatarUrl);
     expect(fileResponse.status).toBe(200);
   });

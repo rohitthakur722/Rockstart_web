@@ -97,7 +97,6 @@ describe("PATCH /api/admin/users/:userId/role", () => {
     const data = expectSuccess(response, 200);
     expect(data.user.role).toBe("user");
 
-    // The demoted user's existing refresh session should now be dead.
     const refreshResponse = await targetAdmin.agent.post("/api/auth/refresh");
     expectError(refreshResponse, 401);
   });
@@ -154,14 +153,6 @@ describe("PATCH /api/admin/users/:userId/status", () => {
   });
 });
 
-// The "don't remove the last active administrator" guard is defense-in-depth
-// inside adminUser.service.js — it is not reachable through a single serial
-// HTTP request: authorizeRoles("admin") requires the *acting* admin to
-// currently be active, and self-action is blocked separately, so the acting
-// admin is always still counted among the survivors after any one request.
-// It only matters for a genuine concurrent-request race or a future caller
-// that doesn't go through those two HTTP-level guards — so it's exercised
-// directly against the real database here, at the service layer.
 describe("adminUser.service last-active-administrator protection", () => {
   it("rejects changeRole when it would leave zero active administrators", async () => {
     const { user: soleAdmin } = await registerAndLoginAsAdmin(app);

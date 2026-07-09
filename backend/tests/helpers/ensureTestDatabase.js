@@ -3,16 +3,8 @@ const fs = require("fs");
 const { Pool } = require("pg");
 const { assertTestDatabase } = require("./assertTestDatabase");
 
-// A bare identifier check — the only thing ever interpolated into SQL here
-// (PostgreSQL has no parameter placeholder for identifiers/DDL), so this is
-// the actual injection guard, not just the "_test" suffix check performed by
-// assertTestDatabase().
 const SAFE_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
-// Creates the test database if it doesn't exist yet, then applies the
-// canonical schema.sql (idempotent either way). Shared by the CLI script
-// (tests/setup/createTestDatabase.js) and Jest's globalSetup so there is
-// exactly one implementation of "make sure rockstar_test is ready."
 const ensureTestDatabase = async () => {
   assertTestDatabase();
 

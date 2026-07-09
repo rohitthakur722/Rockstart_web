@@ -318,8 +318,6 @@ describe("GET /api/songs/:songId/stream", () => {
     const uploadResponse = await uploadSong(agent, authHeader, { audio: buildValidWavBuffer(5) });
     const songId = uploadResponse.body.data.song.id;
 
-    // Newly-uploaded songs are drafts by default, so streaming as their
-    // owner (not an anonymous viewer) is the correct way to exercise this.
     const response = await agent.get(`/api/songs/${songId}/stream`).set(authHeader());
     expect(response.status).toBe(200);
     expect(response.headers["accept-ranges"]).toBe("bytes");
