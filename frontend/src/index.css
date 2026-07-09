@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  /* Rockstar brand colors */
+  --color-rockstar-black: #090909;
+  --color-rockstar-background: #0d0d0d;
+  --color-rockstar-surface: #171717;
+  --color-rockstar-surface-elevated: #202020;
+  --color-rockstar-tan: #c7a77a;
+  --color-rockstar-tan-light: #dfc49e;
+  --color-rockstar-tan-dark: #9b7b52;
+  --color-rockstar-text-primary: #f7f4ef;
+  --color-rockstar-text-secondary: #a9a39b;
+  --color-rockstar-border: #34302b;
+  --color-rockstar-error: #e57373;
+  --color-rockstar-success: #79b791;
+
+  /* Typography */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Radii */
+  --radius-card: 20px;
+  --radius-field: 14px;
+
+  /* Layout widths */
+  --width-sidebar: 264px;
+  --width-content: 1440px;
+  --height-topbar: 64px;
+
+  /* Transitions */
+  --default-transition-duration: 180ms;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-rockstar-border);
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-rockstar-background);
+    color: var(--color-rockstar-text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    min-height: 100svh;
+  }
+
+  ::selection {
+    background: var(--color-rockstar-tan);
+    color: var(--color-rockstar-black);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-rockstar-tan);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@utility bg-rockstar-gradient {
+  background-image: linear-gradient(135deg, #dfc49e 0%, #c7a77a 45%, #9b7b52 100%);
+}
+
+@utility text-rockstar-gradient {
+  background-image: linear-gradient(135deg, #dfc49e 0%, #c7a77a 45%, #9b7b52 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+@utility bg-rockstar-atmosphere {
+  background-image: radial-gradient(circle at top, #24201a 0%, #11100e 38%, #090909 100%);
+}
+
+@utility scrollbar-rockstar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-rockstar-border) transparent;
+}

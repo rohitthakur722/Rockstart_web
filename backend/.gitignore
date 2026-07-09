@@ -1,0 +1,12 @@
+.env
+node_modules/
+uploads/music/*
+uploads/covers/*
+uploads/profiles/*
+uploads/playlists/*
+!uploads/music/.gitkeep
+!uploads/covers/.gitkeep
+!uploads/profiles/.gitkeep
+!uploads/playlists/.gitkeep
+logs/
+coverage/

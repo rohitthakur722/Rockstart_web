@@ -1,0 +1,227 @@
+-- Rockstar Music Player -- Normalized PostgreSQL schema (Phase 1 foundation)
+-- Applies cleanly to a fresh database: psql -d rockstar -f database/schema.sql
+
+BEGIN;
+
+-- ============================================================
+-- users
+-- ============================================================
+CREATE TABLE IF NOT EXISTS users (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  full_name VARCHAR(120) NOT NULL,
+  username VARCHAR(40) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  password_hash TEXT NOT NULL,
+  avatar_url TEXT,
+  role VARCHAR(20) NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  last_login_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Case-insensitive uniqueness without the citext extension.
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_key ON users (LOWER(email));
+CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_key ON users (LOWER(username));
+
+-- ============================================================
+-- refresh_tokens (Phase 2: authentication sessions)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked_at TIMESTAMPTZ,
+  replaced_by_token_id BIGINT REFERENCES refresh_tokens (id) ON DELETE SET NULL,
+  user_agent TEXT,
+  ip_address TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS refresh_tokens_token_hash_key ON refresh_tokens (token_hash);
+CREATE INDEX IF NOT EXISTS refresh_tokens_user_id_idx ON refresh_tokens (user_id);
+CREATE INDEX IF NOT EXISTS refresh_tokens_expires_at_idx ON refresh_tokens (expires_at);
+
+-- ============================================================
+-- password_reset_tokens (Phase 2: password recovery)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS password_reset_tokens_token_hash_key ON password_reset_tokens (token_hash);
+CREATE INDEX IF NOT EXISTS password_reset_tokens_user_id_idx ON password_reset_tokens (user_id);
+CREATE INDEX IF NOT EXISTS password_reset_tokens_expires_at_idx ON password_reset_tokens (expires_at);
+
+-- ============================================================
+-- artists
+-- ============================================================
+CREATE TABLE IF NOT EXISTS artists (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name VARCHAR(150) NOT NULL,
+  bio TEXT,
+  image_url TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Case-insensitive uniqueness: "Rockstar Artist" and "rockstar artist" collide.
+CREATE UNIQUE INDEX IF NOT EXISTS artists_name_lower_key ON artists (LOWER(name));
+
+-- ============================================================
+-- albums
+-- ============================================================
+CREATE TABLE IF NOT EXISTS albums (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  -- RESTRICT (not CASCADE): an artist with existing albums cannot be deleted.
+  -- The service layer rejects the deletion before this constraint is ever hit;
+  -- this is a database-level safety net against uncontrolled cascades.
+  artist_id BIGINT NOT NULL REFERENCES artists (id) ON DELETE RESTRICT,
+  title VARCHAR(200) NOT NULL,
+  cover_url TEXT,
+  release_date DATE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS albums_artist_id_idx ON albums (artist_id);
+-- Case-insensitive uniqueness per artist: two different artists may still
+-- share an album title, but one artist cannot have "Live" and "live" twice.
+CREATE UNIQUE INDEX IF NOT EXISTS albums_artist_title_lower_key ON albums (artist_id, LOWER(title));
+
+-- ============================================================
+-- genres
+-- ============================================================
+CREATE TABLE IF NOT EXISTS genres (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name VARCHAR(60) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS genres_name_lower_key ON genres (LOWER(name));
+
+-- ============================================================
+-- songs
+-- ============================================================
+CREATE TABLE IF NOT EXISTS songs (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  title VARCHAR(200) NOT NULL CHECK (LENGTH(TRIM(title)) > 0),
+  artist_id BIGINT REFERENCES artists (id) ON DELETE SET NULL,
+  album_id BIGINT REFERENCES albums (id) ON DELETE SET NULL,
+  uploaded_by BIGINT REFERENCES users (id) ON DELETE SET NULL,
+  -- Server-managed relative path under uploads/music. Never returned to
+  -- clients directly — the public contract is GET /api/songs/:id/stream.
+  audio_url TEXT NOT NULL,
+  cover_url TEXT,
+  duration_seconds INTEGER NOT NULL CHECK (duration_seconds >= 0),
+  mime_type VARCHAR(100),
+  audio_format VARCHAR(20),
+  file_size BIGINT CHECK (file_size >= 0),
+  track_number INTEGER CHECK (track_number >= 0),
+  release_year SMALLINT CHECK (release_year IS NULL OR (release_year >= 1900 AND release_year <= 2100)),
+  play_count BIGINT NOT NULL DEFAULT 0 CHECK (play_count >= 0),
+  is_published BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS songs_artist_id_idx ON songs (artist_id);
+CREATE INDEX IF NOT EXISTS songs_album_id_idx ON songs (album_id);
+CREATE INDEX IF NOT EXISTS songs_uploaded_by_idx ON songs (uploaded_by);
+CREATE INDEX IF NOT EXISTS songs_title_idx ON songs (LOWER(title));
+CREATE INDEX IF NOT EXISTS songs_is_published_idx ON songs (is_published);
+CREATE INDEX IF NOT EXISTS songs_release_year_idx ON songs (release_year);
+CREATE INDEX IF NOT EXISTS songs_play_count_idx ON songs (play_count);
+CREATE INDEX IF NOT EXISTS songs_created_at_idx ON songs (created_at);
+
+-- ============================================================
+-- song_genres (many-to-many)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS song_genres (
+  song_id BIGINT NOT NULL REFERENCES songs (id) ON DELETE CASCADE,
+  genre_id BIGINT NOT NULL REFERENCES genres (id) ON DELETE CASCADE,
+  PRIMARY KEY (song_id, genre_id)
+);
+
+CREATE INDEX IF NOT EXISTS song_genres_genre_id_idx ON song_genres (genre_id);
+
+-- ============================================================
+-- liked_songs
+-- ============================================================
+CREATE TABLE IF NOT EXISTS liked_songs (
+  user_id BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  song_id BIGINT NOT NULL REFERENCES songs (id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, song_id)
+);
+
+CREATE INDEX IF NOT EXISTS liked_songs_song_id_idx ON liked_songs (song_id);
+CREATE INDEX IF NOT EXISTS liked_songs_user_created_idx ON liked_songs (user_id, created_at DESC);
+
+-- ============================================================
+-- playlists
+-- ============================================================
+CREATE TABLE IF NOT EXISTS playlists (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  name VARCHAR(150) NOT NULL CHECK (LENGTH(TRIM(name)) > 0),
+  description TEXT,
+  cover_url TEXT,
+  is_public BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS playlists_user_id_idx ON playlists (user_id);
+-- Case-insensitive uniqueness per user: one account cannot have "Focus" and
+-- "focus" as two separate playlists.
+CREATE UNIQUE INDEX IF NOT EXISTS playlists_user_name_lower_key ON playlists (user_id, LOWER(name));
+
+-- ============================================================
+-- playlist_songs
+-- ============================================================
+CREATE TABLE IF NOT EXISTS playlist_songs (
+  playlist_id BIGINT NOT NULL REFERENCES playlists (id) ON DELETE CASCADE,
+  song_id BIGINT NOT NULL REFERENCES songs (id) ON DELETE CASCADE,
+  position INTEGER NOT NULL CHECK (position >= 0),
+  added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (playlist_id, song_id)
+);
+
+CREATE INDEX IF NOT EXISTS playlist_songs_song_id_idx ON playlist_songs (song_id);
+CREATE UNIQUE INDEX IF NOT EXISTS playlist_songs_position_key ON playlist_songs (playlist_id, position);
+
+-- ============================================================
+-- playback_history
+-- ============================================================
+CREATE TABLE IF NOT EXISTS playback_history (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  song_id BIGINT NOT NULL REFERENCES songs (id) ON DELETE CASCADE,
+  played_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  listened_seconds INTEGER NOT NULL DEFAULT 0 CHECK (listened_seconds >= 0),
+  completed BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Phase 4: playback-session tracking for qualified-play detection.
+  session_token VARCHAR(36),
+  position_seconds INTEGER NOT NULL DEFAULT 0 CHECK (position_seconds >= 0),
+  qualified_at TIMESTAMPTZ,
+  ended_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS playback_history_user_id_idx ON playback_history (user_id);
+CREATE INDEX IF NOT EXISTS playback_history_song_id_idx ON playback_history (song_id);
+CREATE INDEX IF NOT EXISTS playback_history_played_at_idx ON playback_history (played_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS playback_history_session_token_key
+  ON playback_history (session_token) WHERE session_token IS NOT NULL;
+CREATE INDEX IF NOT EXISTS playback_history_user_played_at_idx ON playback_history (user_id, played_at DESC);
+CREATE INDEX IF NOT EXISTS playback_history_user_song_played_at_idx ON playback_history (user_id, song_id, played_at DESC);
+CREATE INDEX IF NOT EXISTS playback_history_qualified_idx ON playback_history (user_id, qualified_at DESC) WHERE qualified_at IS NOT NULL;
+
+COMMIT;

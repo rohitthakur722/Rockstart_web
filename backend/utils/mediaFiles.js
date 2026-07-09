@@ -1,0 +1,36 @@
+const path = require("path");
+
+const UPLOAD_ROOT = path.join(__dirname, "..", "uploads");
+
+const MEDIA_DIRS = {
+  music: path.join(UPLOAD_ROOT, "music"),
+  covers: path.join(UPLOAD_ROOT, "covers"),
+  profiles: path.join(UPLOAD_ROOT, "profiles"),
+};
+
+const SAFE_FILENAME_PATTERN = /^[a-zA-Z0-9_-]+\.[a-zA-Z0-9]+$/;
+
+// Resolves a server-managed filename against its expected upload directory
+// and verifies the resolved path is actually contained within it. Returns
+// null for anything that doesn't look like a filename we generated
+// ourselves — this is the traversal guard for every managed-file operation.
+const resolveManagedFilePath = (kind, filename) => {
+  const dir = MEDIA_DIRS[kind];
+  if (!dir || !filename || !SAFE_FILENAME_PATTERN.test(filename)) return null;
+
+  const resolvedPath = path.join(dir, filename);
+  if (path.dirname(resolvedPath) !== dir) return null;
+
+  return resolvedPath;
+};
+
+// Extracts the filename portion from a public URL like "/uploads/music/<id>.mp3"
+// for the given kind, or null if it doesn't match that kind's URL prefix.
+const extractManagedFilename = (kind, urlOrPath) => {
+  if (!urlOrPath) return null;
+  const prefix = `/uploads/${kind}/`;
+  if (!urlOrPath.startsWith(prefix)) return null;
+  return urlOrPath.slice(prefix.length);
+};
+
+module.exports = { MEDIA_DIRS, resolveManagedFilePath, extractManagedFilename, SAFE_FILENAME_PATTERN };

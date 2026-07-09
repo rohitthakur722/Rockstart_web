@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="rockstar-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#DFC49E" />
+      <stop offset="45%" stop-color="#C7A77A" />
+      <stop offset="100%" stop-color="#9B7B52" />
+    </linearGradient>
+  </defs>
+  <circle cx="24" cy="24" r="24" fill="#090909" />
+  <circle cx="24" cy="24" r="21" fill="url(#rockstar-gradient)" />
+  <path
+    d="M18 32V16.8L32 14v13.6M18 27.5a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Zm14-3.9a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z"
+    fill="none"
+    stroke="#090909"
+    stroke-width="2.1"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>
