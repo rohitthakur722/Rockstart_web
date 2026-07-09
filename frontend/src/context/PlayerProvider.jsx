@@ -42,6 +42,7 @@ const emptyQueueState = { items: [], originalItems: [], currentIndex: -1 };
 export function PlayerProvider({ children }) {
   const { user, isAuthenticated } = useAuth();
   const userId = user?.id ?? null;
+  const scope = isAuthenticated && userId ? String(userId) : null;
 
   const audioRef = useRef(null);
   const queueStateRef = useRef(emptyQueueState);
@@ -53,6 +54,7 @@ export function PlayerProvider({ children }) {
   const hasRestoredRef = useRef(false);
   const heartbeatTimerRef = useRef(null);
   const persistTimerRef = useRef(null);
+  const previousScopeRef = useRef(null);
 
   const [queueState, setQueueStateRaw] = useState(emptyQueueState);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -68,6 +70,7 @@ export function PlayerProvider({ children }) {
   const [error, setError] = useState(null);
   const [queueDrawerOpen, setQueueDrawerOpen] = useState(false);
   const [sessionToken, setSessionTokenState] = useState(null);
+  const [loadedScope, setLoadedScope] = useState(null);
 
   const setQueueState = useCallback((updater) => {
     setQueueStateRaw((prev) => {
@@ -81,6 +84,20 @@ export function PlayerProvider({ children }) {
     repeatModeRef.current = mode;
     setRepeatModeState(mode);
   }, []);
+
+  // Render-time reset the instant the signed-in scope changes (logout, or a
+  // different account signing in) — a plain derived-state adjustment rather
+  // than an effect, so the UI never shows a stale queue/position from the
+  // previous account. Imperative cleanup (audio element, session, storage)
+  // happens separately below, in the effect that actually owns those systems.
+  if (scope !== loadedScope) {
+    setLoadedScope(scope);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setError(null);
+    setQueueState(emptyQueueState);
+  }
 
   // --- Playback session lifecycle -----------------------------------------
 
@@ -513,25 +530,38 @@ export function PlayerProvider({ children }) {
   // --- Auth-state lifecycle: restore on login, wipe on logout -------------
 
   useEffect(() => {
-    if (!isAuthenticated || !userId) {
-      hasRestoredRef.current = false;
+    if (!scope) {
+      // Component state was already reset above (render-time); this effect
+      // only owns the actual external systems — the audio element, the
+      // in-flight session, and this account's persisted storage entry.
+      const previousScope = previousScopeRef.current;
       endActiveSession(false);
       audioRef.current?.pause();
       if (audioRef.current) audioRef.current.removeAttribute("src");
-      setIsPlaying(false);
-      setCurrentTime(0);
-      setDuration(0);
-      setError(null);
-      setQueueState(emptyQueueState);
+      if (previousScope) clearPlayerState(previousScope);
+      previousScopeRef.current = null;
+      hasRestoredRef.current = false;
       return;
     }
 
+    // hasRestoredRef only resets on a genuine scope change (not on a
+    // StrictMode double-invoke of the same scope), so restoration runs
+    // exactly once per login.
+    if (previousScopeRef.current !== scope) {
+      previousScopeRef.current = scope;
+      hasRestoredRef.current = false;
+    }
     if (hasRestoredRef.current) return;
     hasRestoredRef.current = true;
 
     const saved = loadPlayerState(userId);
     if (!saved) return;
 
+    // Hydrating several independent pieces of UI state from one external
+    // read (localStorage) in one pass, immediately followed by the actual
+    // audio-element synchronization below — a legitimate one-time restore,
+    // not a "derived state" smell.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVolumeState(saved.volume);
     setIsMuted(saved.muted);
     setShuffleEnabled(saved.shuffleEnabled);
@@ -544,7 +574,7 @@ export function PlayerProvider({ children }) {
     setQueueState({ items: saved.queue, originalItems: saved.queue, currentIndex: saved.currentIndex });
     loadIntoAudio(saved.queue[saved.currentIndex], { autoplay: false, startAtSeconds: saved.positionSeconds });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, userId]);
+  }, [scope, userId]);
 
   // --- Periodic + on-change persistence to localStorage --------------------
 
@@ -604,6 +634,83 @@ export function PlayerProvider({ children }) {
   useEffect(() => clearHeartbeat, [clearHeartbeat]);
 
   const currentSong = queueState.items[queueState.currentIndex] || null;
+
+  // --- Media Session API (feature-detected; a no-op where unsupported) ----
+
+  useEffect(() => {
+    if (!("mediaSession" in navigator)) return undefined;
+    const mediaSession = navigator.mediaSession;
+
+    const actionHandlers = [
+      ["play", () => play()],
+      ["pause", () => pause()],
+      ["previoustrack", () => previous()],
+      ["nexttrack", () => next()],
+      [
+        "seekbackward",
+        (details) => seek(Math.max((audioRef.current?.currentTime || 0) - (details.seekOffset || 10), 0)),
+      ],
+      ["seekforward", (details) => seek((audioRef.current?.currentTime || 0) + (details.seekOffset || 10))],
+      ["seekto", (details) => details.seekTime != null && seek(details.seekTime)],
+      ["stop", () => pause()],
+    ];
+
+    actionHandlers.forEach(([action, handler]) => {
+      try {
+        mediaSession.setActionHandler(action, handler);
+      } catch {
+        // Not every action is supported in every browser — safe to skip.
+      }
+    });
+
+    return () => {
+      actionHandlers.forEach(([action]) => {
+        try {
+          mediaSession.setActionHandler(action, null);
+        } catch {
+          // Same as above.
+        }
+      });
+    };
+  }, [play, pause, previous, next, seek]);
+
+  useEffect(() => {
+    if (!("mediaSession" in navigator)) return undefined;
+
+    if (!currentSong) {
+      navigator.mediaSession.metadata = null;
+      return undefined;
+    }
+
+    if (typeof MediaMetadata === "undefined") return undefined;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: currentSong.title || "",
+      artist: currentSong.artist?.name || "",
+      album: currentSong.album?.title || "",
+      artwork: currentSong.coverUrl
+        ? [{ src: buildMediaUrl(currentSong.coverUrl), sizes: "512x512", type: "image/png" }]
+        : [],
+    });
+    return undefined;
+  }, [currentSong]);
+
+  useEffect(() => {
+    if (!("mediaSession" in navigator)) return undefined;
+    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+
+    if (typeof navigator.mediaSession.setPositionState === "function" && duration > 0) {
+      try {
+        navigator.mediaSession.setPositionState({
+          duration,
+          playbackRate: 1,
+          position: Math.min(Math.max(currentTime, 0), duration),
+        });
+      } catch {
+        // Some browsers reject setPositionState outside certain states.
+      }
+    }
+    return undefined;
+  }, [isPlaying, duration, currentTime]);
 
   const value = useMemo(
     () => ({
