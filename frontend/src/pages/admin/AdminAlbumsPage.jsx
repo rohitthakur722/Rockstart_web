@@ -117,8 +117,8 @@ export default function AdminAlbumsPage() {
               {result.items.map((album) => (
                 <tr key={album.id}>
                   <AdminTableCell className="font-medium text-rockstar-text-primary">{album.title}</AdminTableCell>
-                  <AdminTableCell>{album.artist?.name || "—"}</AdminTableCell>
-                  <AdminTableCell>{album.songCount ?? "—"}</AdminTableCell>
+                  <AdminTableCell>{album.artist?.name || "-"}</AdminTableCell>
+                  <AdminTableCell>{album.songCount ?? "-"}</AdminTableCell>
                   <AdminTableCell>
                     <div className="flex gap-2">
                       <Button variant="secondary" size="sm" onClick={() => setEditingAlbum(album)}>
@@ -156,7 +156,7 @@ export default function AdminAlbumsPage() {
         open={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
         title={`Delete "${deleteTarget?.title}"?`}
-        description="The album's songs are kept — they simply lose their album association. Their audio and covers are not deleted."
+        description="The album's songs are kept - they simply lose their album association. Their audio and covers are not deleted."
         confirmLabel="Delete album"
         onConfirm={handleDelete}
       />

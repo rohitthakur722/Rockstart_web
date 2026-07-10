@@ -134,7 +134,7 @@ export default function DeviceLibraryPage() {
     <div className="space-y-6">
       <PageHeader
         title="Device Music"
-        description="Play music straight from your device — nothing is uploaded unless you choose to import it."
+        description="Play music straight from your device - nothing is uploaded unless you choose to import it."
       />
 
       <div className="rounded-[var(--radius-card)] border border-rockstar-border bg-rockstar-surface p-4">
@@ -205,7 +205,7 @@ export default function DeviceLibraryPage() {
 
         {!device.isDirectoryPickerSupported && (
           <p className="mt-3 text-xs text-rockstar-text-secondary">
-            Your browser doesn't support the folder picker (this is normal in Firefox and Safari) — use "Select
+            Your browser doesn't support the folder picker (this is normal in Firefox and Safari) - use "Select
             Folder" or "Select Audio Files" instead. You'll need to re-select the folder after a page refresh.
           </p>
         )}
@@ -242,7 +242,7 @@ export default function DeviceLibraryPage() {
         </div>
 
         <p className="mt-3 text-xs text-rockstar-text-secondary">
-          Only import audio that you own or have permission to use. Scanning never uploads anything automatically —
+          Only import audio that you own or have permission to use. Scanning never uploads anything automatically -
           device songs stay local until you press Import. Clearing Device Library only removes browser references,
           never the original files on your device.
         </p>
@@ -293,7 +293,7 @@ export default function DeviceLibraryPage() {
         <EmptyState
           icon={DeviceIcon}
           title="No device music scanned yet"
-          description="Choose a folder or select files above to browse and play your local music — nothing is uploaded until you explicitly import it."
+          description="Choose a folder or select files above to browse and play your local music - nothing is uploaded until you explicitly import it."
         />
       )}
 

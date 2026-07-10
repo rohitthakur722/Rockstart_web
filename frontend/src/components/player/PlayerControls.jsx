@@ -11,8 +11,8 @@ import { cn } from "../../utils/cn";
 
 const REPEAT_LABELS = {
   off: "Enable repeat",
-  all: "Repeat all — press to repeat one",
-  one: "Repeat one — press to turn off repeat",
+  all: "Repeat all - press to repeat one",
+  one: "Repeat one - press to turn off repeat",
 };
 
 function ToggleButton({ active, onClick, label, children, size }) {

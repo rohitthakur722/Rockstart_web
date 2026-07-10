@@ -3,6 +3,7 @@ import { Button } from "../components/common/Button";
 import { HeartIcon, LibraryIcon, MusicNoteIcon, PlaylistIcon } from "../components/common/icons";
 import { useAuth } from "../hooks/useAuth";
 import { useAppVersion } from "../hooks/useAppVersion";
+import musicDashboardImage from "../assets/musicDashboardImage.jpeg";
 
 const FEATURES = [
   {
@@ -63,7 +64,7 @@ export default function LandingPage() {
               <span className="text-rockstar-gradient"> your space.</span>
             </h1>
             <p className="max-w-md text-base text-rockstar-text-secondary sm:text-lg">
-              A focused music experience built around your library — no clutter,
+              A focused music experience built around your library - no clutter,
               no noise, just the songs that matter to you.
             </p>
             <div className="flex flex-wrap gap-3">
@@ -87,10 +88,16 @@ export default function LandingPage() {
           <div className="relative mx-auto aspect-square w-full max-w-md">
             <div className="absolute inset-0 rounded-[var(--radius-card)] bg-rockstar-gradient opacity-20 blur-3xl" />
             <div className="relative flex h-full w-full flex-col justify-end gap-4 overflow-hidden rounded-[var(--radius-card)] border border-rockstar-border bg-rockstar-surface p-6">
-              <div className="flex-1 rounded-[calc(var(--radius-card)-8px)] bg-rockstar-atmosphere" />
+              <div className="flex-1 rounded-[calc(var(--radius-card)-8px)] bg-rockstar-atmosphere">
+                <img
+                  src={musicDashboardImage}
+                  alt="Now playing artwork"
+                  className="h-full w-full object-contain object-center"
+                />
+              </div>
               <div className="space-y-1">
                 <p className="text-sm font-medium text-rockstar-text-primary">Now playing, wherever you left off</p>
-                <p className="text-xs text-rockstar-text-secondary">Catalog, uploads, playlists, and history — all live</p>
+                <p className="text-xs text-rockstar-text-secondary">Catalog, uploads, playlists, and history - all live</p>
               </div>
             </div>
           </div>

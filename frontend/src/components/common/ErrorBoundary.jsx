@@ -34,7 +34,7 @@ export class ErrorBoundary extends Component {
               Something went wrong
             </h1>
             <p className="text-sm text-rockstar-text-secondary">
-              Rockstar hit an unexpected error. Try returning home — if this keeps
+              Rockstar hit an unexpected error. Try returning home - if this keeps
               happening, refresh the page.
             </p>
           </div>

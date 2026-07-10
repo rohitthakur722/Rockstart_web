@@ -146,7 +146,7 @@ export default function AdminAuditLogsPage() {
                     {log.targetType} #{log.targetId}
                   </AdminTableCell>
                   <AdminTableCell className="text-xs text-rockstar-text-secondary">
-                    {describeMetadata(log) || "—"}
+                    {describeMetadata(log) || "-"}
                   </AdminTableCell>
                 </tr>
               ))}

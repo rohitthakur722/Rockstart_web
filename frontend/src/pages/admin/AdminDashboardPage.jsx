@@ -41,7 +41,7 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Admin Overview" description="Real platform metrics — no fabricated growth or charts." />
+      <PageHeader title="Admin Overview" description="Real platform metrics - no fabricated growth or charts." />
 
       {isLoading && (
         <div className="flex justify-center py-12">
@@ -148,7 +148,7 @@ export default function AdminDashboardPage() {
                 {state.overview.mostPlayedSongs.map((song) => (
                   <li key={song.id} className="flex items-center justify-between text-sm">
                     <span className="min-w-0 truncate text-rockstar-text-primary">
-                      {song.title} <span className="text-rockstar-text-secondary">— {song.artist?.name}</span>
+                      {song.title} <span className="text-rockstar-text-secondary">- {song.artist?.name}</span>
                     </span>
                     <span className="shrink-0 text-xs text-rockstar-text-secondary">
                       {song.playCount} plays · {formatDuration(song.durationSeconds)}

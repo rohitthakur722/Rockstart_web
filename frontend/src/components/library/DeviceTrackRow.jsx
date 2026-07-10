@@ -106,13 +106,13 @@ export function DeviceTrackRow({ track, selected, onToggleSelect, onRetryImport,
       )}
 
       <span className="hidden shrink-0 text-xs uppercase text-rockstar-text-secondary sm:inline">
-        {track.format || "—"}
+        {track.format || "-"}
       </span>
       <span className="hidden shrink-0 text-xs text-rockstar-text-secondary md:inline">
         {formatFileSize(track.sizeBytes)}
       </span>
       <span className="shrink-0 text-xs text-rockstar-text-secondary">
-        {track.durationSeconds != null ? formatDuration(track.durationSeconds) : "—"}
+        {track.durationSeconds != null ? formatDuration(track.durationSeconds) : "-"}
       </span>
 
       <span className="flex shrink-0 items-center gap-1.5">

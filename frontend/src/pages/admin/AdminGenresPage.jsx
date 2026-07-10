@@ -81,7 +81,7 @@ export default function AdminGenresPage() {
             {state.items.map((genre) => (
               <tr key={genre.id}>
                 <AdminTableCell className="font-medium text-rockstar-text-primary">{genre.name}</AdminTableCell>
-                <AdminTableCell>{genre.songCount ?? "—"}</AdminTableCell>
+                <AdminTableCell>{genre.songCount ?? "-"}</AdminTableCell>
                 <AdminTableCell>
                   <div className="flex gap-2">
                     <Button variant="secondary" size="sm" onClick={() => setEditingGenre(genre)}>
@@ -117,7 +117,7 @@ export default function AdminGenresPage() {
         open={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
         title={`Delete "${deleteTarget?.name}"?`}
-        description="This is blocked if any song still uses this genre — remove it from those songs first."
+        description="This is blocked if any song still uses this genre - remove it from those songs first."
         confirmLabel="Delete genre"
         onConfirm={handleDelete}
       />

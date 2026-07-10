@@ -116,8 +116,8 @@ export default function AdminArtistsPage() {
               {result.items.map((artist) => (
                 <tr key={artist.id}>
                   <AdminTableCell className="font-medium text-rockstar-text-primary">{artist.name}</AdminTableCell>
-                  <AdminTableCell>{artist.albumCount ?? "—"}</AdminTableCell>
-                  <AdminTableCell>{artist.songCount ?? "—"}</AdminTableCell>
+                  <AdminTableCell>{artist.albumCount ?? "-"}</AdminTableCell>
+                  <AdminTableCell>{artist.songCount ?? "-"}</AdminTableCell>
                   <AdminTableCell>
                     <div className="flex gap-2">
                       <Button variant="secondary" size="sm" onClick={() => setEditingArtist(artist)}>
@@ -155,7 +155,7 @@ export default function AdminArtistsPage() {
         open={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
         title={`Delete "${deleteTarget?.name}"?`}
-        description="This is blocked if the artist still has albums or songs — remove or reassign those first."
+        description="This is blocked if the artist still has albums or songs - remove or reassign those first."
         confirmLabel="Delete artist"
         onConfirm={handleDelete}
       />

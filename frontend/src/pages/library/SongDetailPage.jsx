@@ -130,7 +130,7 @@ export default function SongDetailPage() {
                     : "border-rockstar-tan-dark/40 bg-rockstar-tan/10 text-rockstar-tan"
                 )}
               >
-                {song.isPublished ? "Published" : "Draft — pending review"}
+                {song.isPublished ? "Published" : "Draft - pending review"}
               </span>
             )}
             <h1 className="text-2xl font-semibold text-rockstar-text-primary">{song.title}</h1>

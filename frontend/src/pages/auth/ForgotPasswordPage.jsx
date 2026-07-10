@@ -52,7 +52,7 @@ export default function ForgotPasswordPage() {
 
         {devResetUrl && (
           <div className="mt-4 space-y-1.5 rounded-[var(--radius-field)] border border-rockstar-tan-dark/40 bg-rockstar-surface-elevated p-3.5">
-            <p className="text-xs font-medium text-rockstar-tan">Development only — link exposed locally</p>
+            <p className="text-xs font-medium text-rockstar-tan">Development only - link exposed locally</p>
             <a
               href={devResetUrl}
               className="block break-all text-xs text-rockstar-tan-light underline focus-visible:outline-2 focus-visible:outline-rockstar-tan rounded"

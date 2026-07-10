@@ -77,7 +77,7 @@ export default function HistoryPage() {
           <StatCard label="Qualified plays" value={state.stats.totalQualifiedPlays} />
           <StatCard label="Listening time" value={formatListenedTime(state.stats.totalListenedSeconds)} />
           <StatCard label="Unique songs" value={state.stats.uniqueSongsPlayed} />
-          <StatCard label="Top artist" value={state.stats.topArtist?.name || "—"} />
+          <StatCard label="Top artist" value={state.stats.topArtist?.name || "-"} />
         </div>
       )}
 

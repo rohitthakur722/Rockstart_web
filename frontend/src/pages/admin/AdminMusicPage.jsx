@@ -168,14 +168,14 @@ export default function AdminMusicPage() {
                         {song.uploader.fullName} (@{song.uploader.username})
                       </span>
                     ) : (
-                      <span className="text-xs text-rockstar-text-secondary">—</span>
+                      <span className="text-xs text-rockstar-text-secondary">-</span>
                     )}
                   </AdminTableCell>
                   <AdminTableCell>
                     <MusicStatusBadge isPublished={song.isPublished} />
                   </AdminTableCell>
                   <AdminTableCell>{formatDuration(song.durationSeconds)}</AdminTableCell>
-                  <AdminTableCell>{song.audioFormat || "—"}</AdminTableCell>
+                  <AdminTableCell>{song.audioFormat || "-"}</AdminTableCell>
                   <AdminTableCell>{new Date(song.createdAt).toLocaleDateString()}</AdminTableCell>
                   <AdminTableCell>
                     <div className="flex flex-wrap gap-2">

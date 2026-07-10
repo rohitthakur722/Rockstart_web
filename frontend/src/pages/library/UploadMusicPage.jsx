@@ -183,7 +183,7 @@ export default function UploadMusicPage() {
             ) : (
               <p className="text-sm text-rockstar-text-secondary">Drag and drop an audio file, or choose one below.</p>
             )}
-            <p className="text-xs text-rockstar-text-secondary">MP3, WAV, M4A, or OGG — up to {MAX_AUDIO_MB}MB.</p>
+            <p className="text-xs text-rockstar-text-secondary">MP3, WAV, M4A, or OGG - up to {MAX_AUDIO_MB}MB.</p>
             <Button
               type="button"
               variant="secondary"
@@ -294,7 +294,7 @@ export default function UploadMusicPage() {
               <Button type="button" variant="secondary" size="sm" onClick={() => coverInputRef.current?.click()}>
                 {coverFile ? "Change cover" : "Choose cover"}
               </Button>
-              <p className="text-xs text-rockstar-text-secondary">JPEG, PNG, or WebP — up to {MAX_COVER_MB}MB.</p>
+              <p className="text-xs text-rockstar-text-secondary">JPEG, PNG, or WebP - up to {MAX_COVER_MB}MB.</p>
             </div>
             <input
               ref={coverInputRef}

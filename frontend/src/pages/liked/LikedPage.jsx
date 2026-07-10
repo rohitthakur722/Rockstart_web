@@ -95,7 +95,7 @@ export default function LikedPage() {
           description={
             params.search
               ? "Try a different search term or clear your filters."
-              : "Songs you like will be saved here — look for the heart icon anywhere in Rockstar."
+              : "Songs you like will be saved here - look for the heart icon anywhere in Rockstar."
           }
         />
       )}

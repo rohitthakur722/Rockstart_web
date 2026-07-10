@@ -214,7 +214,7 @@ export default function AdminUsersPage() {
               : "This removes administrator access. Their existing sessions will be signed out."
             : pendingAction?.nextValue
               ? "This restores account access immediately."
-              : "This is a suspension, not a deletion — the account and its data remain intact and can be reactivated later. Their active sessions will be signed out immediately."
+              : "This is a suspension, not a deletion - the account and its data remain intact and can be reactivated later. Their active sessions will be signed out immediately."
         }
         confirmLabel={
           pendingAction?.type === "role"
