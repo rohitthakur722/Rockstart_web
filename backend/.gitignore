@@ -12,3 +12,4 @@ uploads/playlists/*
 logs/
 coverage/
 tests/.tmp/
+demo-media/

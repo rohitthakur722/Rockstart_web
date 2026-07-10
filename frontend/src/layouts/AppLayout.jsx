@@ -11,6 +11,7 @@ const STATIC_PAGE_TITLES = {
   "/library": "Library",
   "/library/uploads": "My Uploads",
   "/library/upload": "Upload Music",
+  "/library/device": "Device Music",
   "/playlists": "Playlists",
   "/liked": "Liked Songs",
   "/player": "Now Playing",

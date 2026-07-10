@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
-import { MusicNoteIcon, PlayIcon, PauseIcon } from "../common/icons";
+import { PlayIcon, PauseIcon } from "../common/icons";
 import { LikeButton } from "../personal/LikeButton";
 import { SongActionsMenu } from "../personal/SongActionsMenu";
+import { GeneratedArtwork } from "./GeneratedArtwork";
 import { usePlayer } from "../../hooks/usePlayer";
 import { buildMediaUrl } from "../../utils/mediaUrl";
 import { formatDuration } from "../../utils/duration";
@@ -43,7 +44,7 @@ export function SongRow({ song, showStatus = false, actions = null, onPlay = nul
           {coverUrl ? (
             <img src={coverUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
           ) : (
-            <MusicNoteIcon width={18} height={18} aria-hidden="true" />
+            <GeneratedArtwork seed={song.id} title={song.title} artist={song.artist?.name} rounded={false} />
           )}
         </span>
         {isPublished && onPlay && (

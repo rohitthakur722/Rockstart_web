@@ -92,7 +92,8 @@ export function QueueDrawer({ open, onClose, queue, currentIndex, onJumpTo, onRe
                             {song.title}
                           </span>
                           <span className="block truncate text-xs text-rockstar-text-secondary">
-                            {song.artist?.name || "Unknown artist"} · {formatDuration(song.durationSeconds)}
+                            {(song.sourceType === "device" ? song.artist : song.artist?.name) || "Unknown artist"} ·{" "}
+                            {formatDuration(song.durationSeconds)}
                           </span>
                         </span>
                       </button>

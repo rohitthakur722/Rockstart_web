@@ -104,6 +104,42 @@ const validateSongCreateInput = (body = {}) => {
   return { errors, values };
 };
 
+// Device-import mode (POST /api/songs/import) never requires title or
+// artistName — song.service.js's importSong falls back to the filename and
+// "Unknown Artist" — but still enforces the same length/format constraints
+// on whatever was actually supplied. This must never be relaxed for the
+// normal manual-upload path (validateSongCreateInput, above).
+const validateSongImportInput = (body = {}) => {
+  const errors = [];
+  const values = {};
+
+  const title = validateTitle(body.title);
+  if (title.error) errors.push({ field: "title", message: title.error });
+  else values.title = title.value ?? null;
+
+  const artistName = validateArtistName(body.artistName, { required: false });
+  if (artistName.error) errors.push({ field: "artistName", message: artistName.error });
+  else values.artistName = artistName.value ?? null;
+
+  const albumTitle = validateAlbumTitle(body.albumTitle);
+  if (albumTitle.error) errors.push({ field: "albumTitle", message: albumTitle.error });
+  else values.albumTitle = albumTitle.value;
+
+  const genreIds = parseGenreIds(body.genreIds);
+  if (genreIds.error) errors.push({ field: "genreIds", message: genreIds.error });
+  else values.genreIds = genreIds.value;
+
+  const trackNumber = validateTrackNumber(body.trackNumber);
+  if (trackNumber.error) errors.push({ field: "trackNumber", message: trackNumber.error });
+  else values.trackNumber = trackNumber.value;
+
+  const releaseYear = validateReleaseYear(body.releaseYear);
+  if (releaseYear.error) errors.push({ field: "releaseYear", message: releaseYear.error });
+  else values.releaseYear = releaseYear.value;
+
+  return { errors, values };
+};
+
 const UPDATABLE_FIELDS = ["title", "artistName", "albumTitle", "genreIds", "trackNumber", "releaseYear"];
 
 const validateSongUpdateInput = (body = {}) => {
@@ -164,6 +200,7 @@ const validatePublicationInput = (body = {}) => {
 
 module.exports = {
   validateSongCreateInput,
+  validateSongImportInput,
   validateSongUpdateInput,
   validatePublicationInput,
 };

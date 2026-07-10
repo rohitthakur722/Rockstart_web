@@ -18,7 +18,8 @@ const SORT_COLUMNS = {
 const SELECT_COLUMNS = `
   s.id, s.title, s.artist_id, s.album_id, s.uploaded_by, s.audio_url, s.cover_url,
   s.duration_seconds, s.mime_type, s.audio_format, s.file_size, s.track_number,
-  s.release_year, s.play_count, s.is_published, s.created_at, s.updated_at,
+  s.release_year, s.play_count, s.is_published, s.import_source, s.original_file_name,
+  s.created_at, s.updated_at,
   ar.name AS artist_name,
   al.title AS album_title, al.cover_url AS album_cover_url,
   COALESCE(
@@ -260,6 +261,9 @@ const create = async (
     fileSize,
     trackNumber,
     releaseYear,
+    contentHash = null,
+    importSource = "manual",
+    originalFileName = null,
   },
   client
 ) => {
@@ -267,8 +271,9 @@ const create = async (
     `INSERT INTO songs (
        title, artist_id, album_id, uploaded_by, audio_url, cover_url,
        duration_seconds, mime_type, audio_format, file_size, track_number,
-       release_year, play_count, is_published
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, FALSE)
+       release_year, play_count, is_published, content_hash, import_source,
+       original_file_name
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, FALSE, $13, $14, $15)
      RETURNING id`,
     [
       title,
@@ -283,9 +288,22 @@ const create = async (
       fileSize,
       trackNumber,
       releaseYear,
+      contentHash,
+      importSource,
+      originalFileName,
     ]
   );
   return result.rows[0].id;
+};
+
+// Per-user duplicate-import guard (see migrations/005_device_music_import.sql)
+// — different users may still each import the same audio unhindered.
+const findByUploaderAndContentHash = async (uploadedBy, contentHash, client) => {
+  const result = await runner(client).query(
+    "SELECT id FROM songs WHERE uploaded_by = $1 AND content_hash = $2",
+    [uploadedBy, contentHash]
+  );
+  return result.rows[0] || null;
 };
 
 const updateMetadata = async (id, { title, artistId, albumId, trackNumber, releaseYear }, client) => {
@@ -345,6 +363,7 @@ module.exports = {
   findPublishedByArtistIds,
   findPublishedByAlbum,
   create,
+  findByUploaderAndContentHash,
   updateMetadata,
   updateCoverUrl,
   updatePublication,

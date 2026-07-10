@@ -279,3 +279,23 @@ export const TagIcon = (props) => (
     <circle cx="8" cy="8" r="1.4" />
   </svg>
 );
+
+export const FolderIcon = (props) => (
+  <svg {...base} {...props} aria-hidden="true">
+    <path d="M3.5 7a1.5 1.5 0 0 1 1.5-1.5h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 17V7Z" />
+  </svg>
+);
+
+export const DeviceIcon = (props) => (
+  <svg {...base} {...props} aria-hidden="true">
+    <rect x="3" y="4.5" width="18" height="11.5" rx="1.2" />
+    <path d="M2 19.5h20M9.5 16v3M14.5 16v3" />
+  </svg>
+);
+
+export const TrashIcon = (props) => (
+  <svg {...base} {...props} aria-hidden="true">
+    <path d="M4.5 7h15M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2M18 7l-.8 12a1.5 1.5 0 0 1-1.5 1.4H8.3A1.5 1.5 0 0 1 6.8 19L6 7" />
+    <path d="M10 11v6M14 11v6" />
+  </svg>
+);

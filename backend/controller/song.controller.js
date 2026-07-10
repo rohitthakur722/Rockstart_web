@@ -7,6 +7,7 @@ const catalogService = require("../service/catalog.service");
 const { deleteUploadedFiles } = require("../utils/fileCleanup");
 const {
   validateSongCreateInput,
+  validateSongImportInput,
   validateSongUpdateInput,
   validatePublicationInput,
 } = require("../validation/song.validation");
@@ -20,6 +21,21 @@ const create = asyncHandler(async (req, res) => {
 
   const song = await songService.createSong(req.user.id, values, req.files);
   return sendSuccess(res, { statusCode: 201, message: "Song uploaded.", data: { song } });
+});
+
+const importDeviceSong = asyncHandler(async (req, res) => {
+  const { errors, values } = validateSongImportInput(req.body);
+  if (errors.length > 0) {
+    await deleteUploadedFiles(req.files);
+    throw new AppError("Please fix the highlighted fields.", 400, errors);
+  }
+
+  const { song, duplicate } = await songService.importSong(req.user.id, values, req.files);
+  return sendSuccess(res, {
+    statusCode: duplicate ? 200 : 201,
+    message: duplicate ? "This song was already imported to your account." : "Song imported as a draft.",
+    data: { song, duplicate },
+  });
 });
 
 const listPublic = asyncHandler(async (req, res) => {
@@ -76,4 +92,15 @@ const remove = asyncHandler(async (req, res) => {
   return sendSuccess(res, { message: "Song deleted." });
 });
 
-module.exports = { create, listPublic, listMine, getDetail, stream, update, replaceCover, setPublication, remove };
+module.exports = {
+  create,
+  importDeviceSong,
+  listPublic,
+  listMine,
+  getDetail,
+  stream,
+  update,
+  replaceCover,
+  setPublication,
+  remove,
+};

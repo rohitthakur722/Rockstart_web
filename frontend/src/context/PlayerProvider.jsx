@@ -40,6 +40,18 @@ const friendlyMediaError = (mediaError) => {
 
 const emptyQueueState = { items: [], originalItems: [], currentIndex: -1 };
 
+// One source-resolution point for both playback origins: server songs stream
+// through the existing access-controlled endpoint; device tracks play from a
+// local object URL the caller (DeviceLibraryPage) already created via
+// useDeviceLibrary().getPlaybackUrl() and attached as `localPlaybackUrl` —
+// PlayerProvider never needs to know about DeviceLibraryContext at all.
+const resolvePlaybackSource = (song) => {
+  if (song?.sourceType === "device") return song.localPlaybackUrl || null;
+  return buildMediaUrl(song?.streamUrl);
+};
+
+const isDeviceSong = (song) => song?.sourceType === "device";
+
 export function PlayerProvider({ children }) {
   const { user, isAuthenticated } = useAuth();
   const userId = user?.id ?? null;
@@ -131,7 +143,7 @@ export function PlayerProvider({ children }) {
 
   const startSessionForCurrentSong = useCallback(async () => {
     const song = queueStateRef.current.items[queueStateRef.current.currentIndex];
-    if (!song) return;
+    if (!song || isDeviceSong(song)) return;
 
     try {
       const res = await playbackApi.startSession(song.id);
@@ -187,10 +199,14 @@ export function PlayerProvider({ children }) {
     setDuration(song.durationSeconds || 0);
     lastTimeUpdateRef.current = startAtSeconds;
 
-    const src = buildMediaUrl(song.streamUrl);
+    const src = resolvePlaybackSource(song);
     if (!src) {
       setIsLoading(false);
-      setError("This song is no longer available.");
+      setError(
+        isDeviceSong(song)
+          ? "This device file is no longer available. Try rescanning."
+          : "This song is no longer available."
+      );
       return;
     }
 
@@ -605,7 +621,14 @@ export function PlayerProvider({ children }) {
     }
 
     const persist = () => {
-      if (queueStateRef.current.items.length === 0) return;
+      const items = queueStateRef.current.items;
+      if (items.length === 0) return;
+      // Device tracks carry a live File/FileSystemFileHandle and a blob:
+      // object URL — neither survives JSON.stringify or a reload, and File
+      // objects must never end up in localStorage. A queue containing any
+      // device track is simply not persisted; the user re-selects it after
+      // a refresh, exactly as documented for the webkitdirectory fallback.
+      if (items.some(isDeviceSong)) return;
       savePlayerState(userId, {
         queue: queueStateRef.current.items,
         currentIndex: queueStateRef.current.currentIndex,
@@ -706,13 +729,13 @@ export function PlayerProvider({ children }) {
     }
 
     if (typeof MediaMetadata === "undefined") return undefined;
+    const device = isDeviceSong(currentSong);
+    const artworkSrc = device ? currentSong.artworkUrl : buildMediaUrl(currentSong.coverUrl);
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentSong.title || "",
-      artist: currentSong.artist?.name || "",
-      album: currentSong.album?.title || "",
-      artwork: currentSong.coverUrl
-        ? [{ src: buildMediaUrl(currentSong.coverUrl), sizes: "512x512", type: "image/png" }]
-        : [],
+      artist: (device ? currentSong.artist : currentSong.artist?.name) || "",
+      album: (device ? currentSong.album : currentSong.album?.title) || "",
+      artwork: artworkSrc ? [{ src: artworkSrc, sizes: "512x512", type: "image/png" }] : [],
     });
     return undefined;
   }, [currentSong]);

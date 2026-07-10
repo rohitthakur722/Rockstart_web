@@ -36,6 +36,8 @@ const mapSong = (row, { viewer = null } = {}) => {
     song.mimeType = row.mime_type || null;
     song.uploadedBy = row.uploaded_by;
     song.isOwner = Boolean(isOwner);
+    song.importSource = row.import_source || "manual";
+    song.originalFileName = row.original_file_name || null;
   }
 
   // Only present on admin-listing queries (song.model.js's findAdminList),

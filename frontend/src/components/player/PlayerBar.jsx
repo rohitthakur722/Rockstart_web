@@ -117,6 +117,9 @@ export function PlayerBar() {
 
   if (!currentSong) return null;
 
+  const isDevice = currentSong.sourceType === "device";
+  const artistName = isDevice ? currentSong.artist : currentSong.artist?.name;
+
   return (
     <>
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-rockstar-border bg-rockstar-black lg:pl-[var(--width-sidebar)]">
@@ -138,9 +141,16 @@ export function PlayerBar() {
         >
           <PlayerArtwork song={currentSong} size="sm" className="h-10 w-10" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-rockstar-text-primary">{currentSong.title}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="block truncate text-sm font-medium text-rockstar-text-primary">{currentSong.title}</span>
+              {isDevice && (
+                <span className="shrink-0 rounded-full border border-rockstar-tan-dark/40 bg-rockstar-tan/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-rockstar-tan">
+                  Device
+                </span>
+              )}
+            </span>
             <span className="block truncate text-xs text-rockstar-text-secondary">
-              {currentSong.artist?.name || "Unknown artist"}
+              {artistName || "Unknown artist"}
             </span>
             <span className="mt-1 block h-1 w-full overflow-hidden rounded-full bg-rockstar-border">
               <span
@@ -194,18 +204,35 @@ export function PlayerBar() {
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <PlayerArtwork song={currentSong} size="sm" />
             <span className="min-w-0">
-              <Link to={`/songs/${currentSong.id}`} className="block truncate text-sm font-medium text-rockstar-text-primary hover:underline">
-                {currentSong.title}
-              </Link>
-              <span className="block truncate text-xs text-rockstar-text-secondary">
-                {currentSong.artist && (
-                  <Link to={`/artists/${currentSong.artist.id}`} className="hover:text-rockstar-tan-light hover:underline">
-                    {currentSong.artist.name}
+              <span className="flex items-center gap-1.5">
+                {isDevice ? (
+                  <span className="block truncate text-sm font-medium text-rockstar-text-primary">
+                    {currentSong.title}
+                  </span>
+                ) : (
+                  <Link to={`/songs/${currentSong.id}`} className="block truncate text-sm font-medium text-rockstar-text-primary hover:underline">
+                    {currentSong.title}
                   </Link>
+                )}
+                {isDevice && (
+                  <span className="shrink-0 rounded-full border border-rockstar-tan-dark/40 bg-rockstar-tan/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-rockstar-tan">
+                    Device
+                  </span>
+                )}
+              </span>
+              <span className="block truncate text-xs text-rockstar-text-secondary">
+                {isDevice ? (
+                  artistName
+                ) : (
+                  currentSong.artist && (
+                    <Link to={`/artists/${currentSong.artist.id}`} className="hover:text-rockstar-tan-light hover:underline">
+                      {currentSong.artist.name}
+                    </Link>
+                  )
                 )}
               </span>
             </span>
-            <LikeButton song={currentSong} />
+            {!isDevice && <LikeButton song={currentSong} />}
           </div>
 
           <div className="flex w-full max-w-xl flex-col items-center gap-1">

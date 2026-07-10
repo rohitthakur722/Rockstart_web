@@ -52,6 +52,10 @@ export default function PlayerPage() {
     );
   }
 
+  const isDevice = currentSong.sourceType === "device";
+  const artistName = isDevice ? currentSong.artist : currentSong.artist?.name;
+  const albumTitle = isDevice ? currentSong.album : currentSong.album?.title;
+
   return (
     <div className="mx-auto flex max-w-lg flex-col items-center gap-8 pb-24 pt-4 text-center">
       {error && <ErrorState title="Playback issue" message={error} onRetry={dismissError} />}
@@ -61,23 +65,42 @@ export default function PlayerPage() {
       <div className="w-full space-y-2">
         <div className="flex items-center justify-center gap-2">
           <h1 className="min-w-0 truncate text-xl font-semibold text-rockstar-text-primary">{currentSong.title}</h1>
+          {isDevice && (
+            <span className="shrink-0 rounded-full border border-rockstar-tan-dark/40 bg-rockstar-tan/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-rockstar-tan">
+              Device
+            </span>
+          )}
           {(isLoading || isBuffering) && <LoadingSpinner size="sm" label="Buffering" />}
         </div>
         <p className="truncate text-sm text-rockstar-text-secondary">
-          {currentSong.artist && (
-            <Link to={`/artists/${currentSong.artist.id}`} className="hover:text-rockstar-tan-light hover:underline">
-              {currentSong.artist.name}
-            </Link>
-          )}
-          {currentSong.album && (
+          {isDevice ? (
             <>
-              {" · "}
-              <Link to={`/albums/${currentSong.album.id}`} className="hover:text-rockstar-tan-light hover:underline">
-                {currentSong.album.title}
-              </Link>
+              {artistName}
+              {albumTitle && ` · ${albumTitle}`}
+            </>
+          ) : (
+            <>
+              {currentSong.artist && (
+                <Link to={`/artists/${currentSong.artist.id}`} className="hover:text-rockstar-tan-light hover:underline">
+                  {currentSong.artist.name}
+                </Link>
+              )}
+              {currentSong.album && (
+                <>
+                  {" · "}
+                  <Link to={`/albums/${currentSong.album.id}`} className="hover:text-rockstar-tan-light hover:underline">
+                    {currentSong.album.title}
+                  </Link>
+                </>
+              )}
             </>
           )}
         </p>
+        {isDevice && (
+          <p className="text-xs text-rockstar-text-secondary">
+            Playing from your device. Import it to like it or add it to a playlist.
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-3">

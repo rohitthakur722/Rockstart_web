@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { MusicNoteIcon } from "../common/icons";
+import { GeneratedArtwork } from "./GeneratedArtwork";
 import { buildMediaUrl } from "../../utils/mediaUrl";
 import { cn } from "../../utils/cn";
 
@@ -20,7 +20,7 @@ export function MusicCard({ to, title, subtitle, coverUrl, count, variant = "squ
         {resolvedCover ? (
           <img src={resolvedCover} alt="" className="h-full w-full object-cover" loading="lazy" />
         ) : (
-          <MusicNoteIcon width={28} height={28} aria-hidden="true" />
+          <GeneratedArtwork seed={to} title={title} artist={subtitle} rounded={false} />
         )}
       </span>
       <span className="space-y-0.5">

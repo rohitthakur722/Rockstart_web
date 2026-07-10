@@ -30,6 +30,9 @@ export function SongActionsMenu({ song }) {
   if (!song || song.isPublished === false) return null;
 
   const hasActiveQueue = Boolean(currentSong);
+  // Device-only tracks have no server-side song id — playlists (like likes)
+  // are a server feature and must never receive a "device:..." id.
+  const isDevice = song.sourceType === "device";
 
   return (
     <div className="relative" ref={containerRef}>
@@ -84,24 +87,36 @@ export function SongActionsMenu({ song }) {
             <QueueIcon width={15} height={15} aria-hidden="true" />
             Add to queue
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              setAddToPlaylistOpen(true);
-              setOpen(false);
-            }}
-            className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-sm text-rockstar-text-primary hover:bg-rockstar-surface"
-          >
-            <PlaylistIcon width={15} height={15} aria-hidden="true" />
-            Add to playlist
-          </button>
+          {isDevice ? (
+            <p
+              role="menuitem"
+              aria-disabled="true"
+              className="px-3.5 py-2 text-left text-xs text-rockstar-text-secondary"
+            >
+              Import this track to use playlists.
+            </p>
+          ) : (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setAddToPlaylistOpen(true);
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-sm text-rockstar-text-primary hover:bg-rockstar-surface"
+            >
+              <PlaylistIcon width={15} height={15} aria-hidden="true" />
+              Add to playlist
+            </button>
+          )}
         </div>
       )}
 
-      <AddToPlaylistModal open={addToPlaylistOpen} onClose={() => setAddToPlaylistOpen(false)} song={song} />
+      {!isDevice && (
+        <AddToPlaylistModal open={addToPlaylistOpen} onClose={() => setAddToPlaylistOpen(false)} song={song} />
+      )}
     </div>
   );
 }

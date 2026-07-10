@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+const fs = require("fs");
 const songModel = require("../model/song.model");
 const artistModel = require("../model/artist.model");
 const albumModel = require("../model/album.model");
@@ -14,6 +16,26 @@ const {
   deleteManagedMusicFile,
   deleteManagedCover,
 } = require("../utils/fileCleanup");
+
+const FALLBACK_ARTIST_NAME = "Unknown Artist";
+const FALLBACK_TITLE = "Unknown Track";
+
+// Streamed (never loads the whole file into memory) so hashing a large audio
+// file during import doesn't spike backend memory usage.
+const computeFileSha256 = (filePath) =>
+  new Promise((resolve, reject) => {
+    const hash = crypto.createHash("sha256");
+    const stream = fs.createReadStream(filePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => resolve(hash.digest("hex")));
+    stream.on("error", reject);
+  });
+
+const titleFromFilename = (originalName) => {
+  const withoutExt = String(originalName || "").replace(/\.[^./\\]+$/, "");
+  const trimmed = withoutExt.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
 
 const ALLOWED_AUDIO_SIGNATURE_EXTS = new Set(["mp3", "wav", "m4a", "mp4", "ogg", "oga"]);
 
@@ -132,6 +154,92 @@ const createSong = async (userId, fields, files) => {
 
     const row = await songModel.findById(songId);
     return mapSong(row, { viewer: { id: userId, role: "user" } });
+  } catch (err) {
+    await deleteUploadedFiles(files);
+    throw err;
+  }
+};
+
+// Bulk device-music import (POST /api/songs/import). Distinct from
+// createSong: metadata falls back to the filename / "Unknown Artist" instead
+// of requiring an artist name, and a per-user content hash prevents the same
+// audio being imported twice — everything else (signature validation,
+// metadata extraction, transaction, draft status, ownership, cleanup) is the
+// same authoritative pipeline as the normal manual upload.
+const importSong = async (userId, fields, files) => {
+  const audioFile = files?.audio?.[0];
+  const coverFile = files?.cover?.[0];
+
+  if (!audioFile) {
+    if (coverFile) await deleteUploadedFile(coverFile);
+    throw new AppError("An audio file is required.", 400);
+  }
+
+  try {
+    if (coverFile && coverFile.size > getImageMaxBytes()) {
+      throw new AppError("The cover image exceeds the configured limit.", 400);
+    }
+
+    await validateAudioSignature(audioFile.path);
+    if (coverFile) await validateImageSignature(coverFile.path, "Cover image");
+
+    const contentHash = await computeFileSha256(audioFile.path);
+
+    const existing = await songModel.findByUploaderAndContentHash(userId, contentHash);
+    if (existing) {
+      // This exact audio content was already imported by this same user —
+      // discard the newly saved duplicate and hand back their existing song
+      // rather than creating a second database row.
+      await deleteUploadedFiles(files);
+      const row = await songModel.findById(existing.id);
+      return { song: mapSong(row, { viewer: { id: userId, role: "user" } }), duplicate: true };
+    }
+
+    const metadata = await extractAudioMetadata(audioFile.path);
+
+    const title =
+      fields.title || metadata.embedded.title || titleFromFilename(audioFile.originalname) || FALLBACK_TITLE;
+    const artistName = fields.artistName || metadata.embedded.artist || FALLBACK_ARTIST_NAME;
+
+    const trackNumber = fields.trackNumber ?? metadata.embedded.trackNumber ?? null;
+    const releaseYear = fields.releaseYear ?? metadata.embedded.releaseYear ?? null;
+
+    await validateGenreIds(fields.genreIds);
+
+    const audioUrl = `/uploads/music/${audioFile.filename}`;
+    const coverUrl = coverFile ? `/uploads/covers/${coverFile.filename}` : null;
+
+    const songId = await withTransaction(async (client) => {
+      const artist = await resolveOrCreateArtist(artistName, client);
+      const album = await resolveOrCreateAlbum(artist.id, fields.albumTitle, client);
+
+      const newSongId = await songModel.create(
+        {
+          title,
+          artistId: artist.id,
+          albumId: album?.id || null,
+          uploadedBy: userId,
+          audioUrl,
+          coverUrl,
+          durationSeconds: metadata.durationSeconds,
+          mimeType: audioFile.mimetype,
+          audioFormat: metadata.format,
+          fileSize: audioFile.size,
+          trackNumber,
+          releaseYear,
+          contentHash,
+          importSource: "device_import",
+          originalFileName: audioFile.originalname,
+        },
+        client
+      );
+
+      await songModel.replaceGenres(newSongId, fields.genreIds, client);
+      return newSongId;
+    });
+
+    const row = await songModel.findById(songId);
+    return { song: mapSong(row, { viewer: { id: userId, role: "user" } }), duplicate: false };
   } catch (err) {
     await deleteUploadedFiles(files);
     throw err;
@@ -265,6 +373,7 @@ const setPublication = async (songId, isPublished) => {
 
 module.exports = {
   createSong,
+  importSong,
   getSongDetail,
   getSongForStreaming,
   updateSong,

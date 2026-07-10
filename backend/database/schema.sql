@@ -127,6 +127,12 @@ CREATE TABLE IF NOT EXISTS songs (
   release_year SMALLINT CHECK (release_year IS NULL OR (release_year >= 1900 AND release_year <= 2100)),
   play_count BIGINT NOT NULL DEFAULT 0 CHECK (play_count >= 0),
   is_published BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Device-import support (Phase 6): content_hash is only ever set for
+  -- imported songs (NULL for the manual-upload path); import_source is
+  -- purely informational and never used for authorization.
+  content_hash CHAR(64),
+  import_source VARCHAR(20) NOT NULL DEFAULT 'manual' CHECK (import_source IN ('manual', 'device_import')),
+  original_file_name VARCHAR(255),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -135,6 +141,9 @@ CREATE INDEX IF NOT EXISTS songs_artist_id_idx ON songs (artist_id);
 CREATE INDEX IF NOT EXISTS songs_album_id_idx ON songs (album_id);
 CREATE INDEX IF NOT EXISTS songs_uploaded_by_idx ON songs (uploaded_by);
 CREATE INDEX IF NOT EXISTS songs_title_idx ON songs (LOWER(title));
+-- Per-user duplicate-import guard — see migrations/005_device_music_import.sql.
+CREATE UNIQUE INDEX IF NOT EXISTS songs_uploaded_by_content_hash_key
+  ON songs (uploaded_by, content_hash) WHERE content_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS songs_is_published_idx ON songs (is_published);
 CREATE INDEX IF NOT EXISTS songs_release_year_idx ON songs (release_year);
 CREATE INDEX IF NOT EXISTS songs_play_count_idx ON songs (play_count);

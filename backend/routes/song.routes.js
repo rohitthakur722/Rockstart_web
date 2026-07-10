@@ -14,6 +14,14 @@ const uploadSongCover = createUploader("covers").single("cover");
 router.get("/", optionalAuthenticate, songController.listPublic);
 router.get("/mine", authenticate, songController.listMine);
 router.post("/", authenticate, uploadLimiter, uploadSong, uploadErrorMiddleware, songController.create);
+router.post(
+  "/import",
+  authenticate,
+  uploadLimiter,
+  uploadSong,
+  uploadErrorMiddleware,
+  songController.importDeviceSong
+);
 
 router.get("/:songId", optionalAuthenticate, songController.getDetail);
 router.get("/:songId/stream", optionalAuthenticate, songController.stream);

@@ -3,6 +3,7 @@ import { DevHealthBadge } from "./components/common/DevHealthBadge";
 import { AuthProvider } from "./context/AuthProvider";
 import { PreferenceProvider } from "./context/PreferenceProvider";
 import { PersonalLibraryProvider } from "./context/PersonalLibraryProvider";
+import { DeviceLibraryProvider } from "./context/DeviceLibraryProvider";
 import { PlayerProvider } from "./context/PlayerProvider";
 import { AppRouter } from "./routes/AppRouter";
 
@@ -12,10 +13,12 @@ function App() {
       <AuthProvider>
         <PreferenceProvider>
           <PersonalLibraryProvider>
-            <PlayerProvider>
-              <AppRouter />
-              <DevHealthBadge />
-            </PlayerProvider>
+            <DeviceLibraryProvider>
+              <PlayerProvider>
+                <AppRouter />
+                <DevHealthBadge />
+              </PlayerProvider>
+            </DeviceLibraryProvider>
           </PersonalLibraryProvider>
         </PreferenceProvider>
       </AuthProvider>

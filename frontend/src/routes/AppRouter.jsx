@@ -16,6 +16,7 @@ import HomePage from "../pages/home/HomePage";
 import LibraryPage from "../pages/library/LibraryPage";
 import MyUploadsPage from "../pages/library/MyUploadsPage";
 import UploadMusicPage from "../pages/library/UploadMusicPage";
+import DeviceLibraryPage from "../pages/library/DeviceLibraryPage";
 import SongDetailPage from "../pages/library/SongDetailPage";
 import ArtistDetailPage from "../pages/library/ArtistDetailPage";
 import AlbumDetailPage from "../pages/library/AlbumDetailPage";
@@ -67,6 +68,7 @@ export function AppRouter() {
             <Route path="/library" element={<LibraryPage />} />
             <Route path="/library/uploads" element={<MyUploadsPage />} />
             <Route path="/library/upload" element={<UploadMusicPage />} />
+            <Route path="/library/device" element={<DeviceLibraryPage />} />
             <Route path="/songs/:songId" element={<SongDetailPage />} />
             <Route path="/artists/:artistId" element={<ArtistDetailPage />} />
             <Route path="/albums/:albumId" element={<AlbumDetailPage />} />

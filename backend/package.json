@@ -12,6 +12,7 @@
     "db:seed": "psql -d \"${DB_NAME:-rockstar}\" -f database/seed.sql",
     "uploads:cleanup": "node scripts/cleanupOrphanUploads.js",
     "uploads:cleanup:delete": "node scripts/cleanupOrphanUploads.js --delete",
+    "demo:music": "node scripts/setupDemoMusic.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
     "test:unit": "NODE_OPTIONS=--experimental-vm-modules jest tests/unit --runInBand",
     "test:integration": "NODE_OPTIONS=--experimental-vm-modules jest tests/integration --runInBand",

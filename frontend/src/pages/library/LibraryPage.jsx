@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Button } from "../../components/common/Button";
-import { SearchIcon } from "../../components/common/icons";
+import { SearchIcon, DeviceIcon } from "../../components/common/icons";
 import { cn } from "../../utils/cn";
 import { useCatalogParams } from "../../hooks/useCatalogParams";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
@@ -58,9 +58,15 @@ export default function LibraryPage() {
         title="Library"
         description="Everything in the Rockstar catalog, in one place."
         actions={
-          <Button as={Link} to="/library/upload" size="sm">
-            Upload Music
-          </Button>
+          <>
+            <Button as={Link} to="/library/device" variant="secondary" size="sm">
+              <DeviceIcon width={16} height={16} aria-hidden="true" />
+              Scan Device Music
+            </Button>
+            <Button as={Link} to="/library/upload" size="sm">
+              Upload Music
+            </Button>
+          </>
         }
       />
 

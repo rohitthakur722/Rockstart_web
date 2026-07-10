@@ -16,6 +16,18 @@ export const uploadSong = (formData, { onUploadProgress } = {}) =>
     })
     .then((res) => res.data);
 
+// Bulk device-music import — same multipart contract as uploadSong, but
+// title/artistName are optional (the server falls back to the filename /
+// "Unknown Artist"). Imported songs are always created as drafts.
+export const importSong = (formData, { onUploadProgress, signal } = {}) =>
+  axiosInstance
+    .post("/songs/import", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      onUploadProgress,
+      signal,
+    })
+    .then((res) => res.data);
+
 export const updateSong = (songId, payload) =>
   axiosInstance.patch(`/songs/${songId}`, payload).then((res) => res.data);
 

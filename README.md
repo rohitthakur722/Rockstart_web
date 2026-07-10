@@ -418,6 +418,7 @@ Frontend runs at `http://localhost:5173` and talks to the backend through
 | backend   | `npm start`      | Start API with node              |
 | backend   | `npm run db:schema` | Apply `database/schema.sql`  |
 | backend   | `npm run db:seed`   | Apply `database/seed.sql`    |
+| backend   | `npm run demo:music` | Generate original demo WAV tracks + covers for testing Device Music, into gitignored `demo-media/` |
 | frontend  | `npm run dev`    | Start Vite dev server            |
 | frontend  | `npm run build`  | Production build                 |
 
@@ -449,6 +450,7 @@ GET    /api/users/me/export           # downloadable JSON, no secrets/tokens
 GET    /api/songs                    # public, published only, search/filter/sort/paginate
 GET    /api/songs/mine               # authenticated, own drafts + published
 POST   /api/songs                    # authenticated, multipart (audio + optional cover)
+POST   /api/songs/import             # authenticated, multipart, lenient metadata fallback, per-user content-hash dedupe
 GET    /api/songs/:songId            # published, or owner/admin for a draft
 GET    /api/songs/:songId/stream     # byte-range audio streaming
 PATCH  /api/songs/:songId            # owner/admin, metadata only
@@ -564,6 +566,182 @@ rather than racing to overwrite newer results.
   duration/format/file-size, and (for the owner or an admin) edit-metadata,
   replace-cover, and delete actions with an accessible confirmation dialog
   that explains exactly what will and won't be deleted.
+
+## Device Music (Local Scanning, Playback & Import)
+
+`/library/device` (reached via "Scan Device Music" on the Library page) lets
+a signed-in user browse and play audio files straight from their own device
+— entirely separate from the server-backed catalog above — and, if they
+choose to, explicitly import selected tracks into their RockStar account.
+
+### Browser permission model
+
+**RockStar can only scan files and folders a user explicitly chooses.**
+There is no automatic, background, or silent filesystem access:
+
+- **Primary method** — `window.showDirectoryPicker({ mode: "read" })`
+  (Chromium-based browsers), feature-detected and only ever invoked from a
+  button click. Recurses read-only through the chosen directory
+  (`frontend/src/services/deviceMusicScanner.js`'s `iterateDirectoryFiles`);
+  never requests write access; a cancelled picker resolves to `null`, not an
+  error.
+- **Fallback method** — a hidden `<input type="file" webkitdirectory>` for a
+  folder-equivalent selection, plus a plain `<input type="file" multiple>`
+  ("Select Audio Files") that works in every browser, including Firefox and
+  Safari, which don't implement `showDirectoryPicker`.
+- **Drag and drop** — an optional third method; dropped files are normalized
+  through the same pipeline as the other two.
+- Every entry point requires an explicit user action first; the page states
+  up front, "RockStar can only scan files and folders that you choose."
+
+### Scanning
+
+`deviceMusicScanner.js` owns feature detection, recursion, format
+filtering, fingerprinting, and metadata extraction — kept out of
+`DeviceLibraryPage.jsx` so the page stays a thin UI layer. Files are
+processed through a small dependency-free concurrency limiter
+(`runWithConcurrency`, 4 at a time) so scanning a large folder doesn't block
+the UI or parse hundreds of files at once. Each file gets a fast, local-only
+fingerprint (SHA-256 over its relative path + size + last-modified time,
+never its contents) for a stable id, plus a content-based SHA-256 hash
+(bounded to files under 100MB, computed with the same limited concurrency)
+for genuine duplicate detection across differently-named files. Cancellation
+is cooperative via `AbortController`, checked between files, and a user
+cancellation surfaces as a normal "cancelled" state, never an error.
+
+Each scanned file resolves to one status — `playable`, `unsupported`,
+`duplicate`, or `metadata_error` — determined by a two-layer format check:
+an extension/MIME allowlist (MP3, WAV, M4A, MP4/AAC, OGG, Opus, FLAC, WebM
+audio) followed by a real `audio.canPlayType()` probe, since format support
+genuinely varies by browser. Unsupported files stay visible in the scan
+summary but are excluded from the playable queue and from Play All/Shuffle
+All.
+
+### Metadata and artwork
+
+Metadata extraction uses the current, maintained **`music-metadata`**
+package (not the discontinued `-browser` fork) via its browser-compatible
+`parseBlob`/`selectCover` exports — confirmed by inspecting the installed
+package's conditional exports (`lib/core.js`, built on `strtok3`'s
+Blob-based tokenizer, with no Node-only APIs). It's loaded with a **lazy
+dynamic `import()`**, not a static one: `DeviceLibraryProvider` lives in the
+always-mounted provider tree in `App.jsx`, so a static import would ship
+`music-metadata`'s parsers (~130KB gzipped) to every visitor, not just the
+ones who open Device Music. Extracted fields (title, artist, album, album
+artist, track/disc number, year, genre, duration, codec, container,
+bitrate, embedded picture) fall back, in order:
+
+- **Title** — embedded title → filename without its extension → "Unknown Track"
+- **Artist** — embedded artist → embedded album artist → "Unknown Artist"
+- **Album** — embedded album → parent folder name → "Unknown Album"
+
+None of this requires the user to type anything before local playback works.
+
+When a file has embedded artwork, the first suitable picture
+(`selectCover`) becomes a `Blob` → `URL.createObjectURL` — revoked when the
+track leaves the library (`clearLibrary`) or the provider unmounts. When
+there's no embedded artwork (true for most of this project's own generated
+demo tracks), **`GeneratedArtwork.jsx`** renders a deterministic, RockStar-
+styled cover (near-black gradient, warm tan/gold accent, one of a few
+restrained geometric motifs, the track's initials) computed from a
+non-cryptographic hash of a stable seed — the same track always renders the
+same design, and nothing is ever downloaded. This same fallback also now
+covers server songs, albums, and artists with no uploaded cover — see
+`SongRow`, `MusicCard`, and `PlayerArtwork`.
+
+### Local playback
+
+Device tracks share the app's single global `HTMLAudioElement` — no
+per-song audio element is ever created. `PlayerProvider` resolves a track's
+source through one function:
+
+```js
+const resolvePlaybackSource = (song) =>
+  song.sourceType === "device" ? song.localPlaybackUrl : buildMediaUrl(song.streamUrl);
+```
+
+`localPlaybackUrl` is a `URL.createObjectURL(file)` created on demand by
+`useDeviceLibrary().getPlaybackUrl()` when a queue is built (not eagerly for
+every scanned file) — `PlayerProvider` never imports `DeviceLibraryContext`
+itself, keeping the two providers decoupled. Queue, shuffle, repeat, seek,
+volume, and mute all work identically for device and server tracks; a
+"Device" badge appears next to the title in the mini/full player bar and
+the full player page. Because `startSessionForCurrentSong` bails out
+immediately for `sourceType === "device"`, device playback **never** opens
+a server playback session — meaning it never increments `play_count` and
+never writes a listening-history row; likes and playlist actions are hidden
+for device tracks (`LikeButton`, `SongActionsMenu`) since neither is
+meaningful without a server-side song id. Device tracks are also excluded
+from the periodic `localStorage` restoration snapshot — a `File` object
+can't survive `JSON.stringify` or a reload, and one must never be persisted
+there — so route navigation within a session preserves device playback
+exactly like server playback, but a full page reload requires re-selecting
+the folder/files (documented on the page itself).
+
+### RockStar import
+
+Scanning **never** uploads anything. Import is a separate, explicit,
+multi-step action: select tracks → press "Import Selected" → confirm in a
+dialog that states what will happen → tracks upload with **2 at a time**
+concurrency, per-track progress, and a **Retry** action for any track that
+fails (successful imports are never re-sent). The backend endpoint,
+`POST /api/songs/import`, reuses the exact same authoritative pipeline as
+the manual upload form (`song.service.js`) — authentication, Multer, real
+file-signature validation, server-side metadata extraction, a generated
+safe filename, a PostgreSQL transaction, ownership from `req.user.id`,
+draft-by-default status, and cleanup on failure — but with its own, more
+lenient validator (`validateSongImportInput`) that never requires a title or
+artist name, falling back to the filename / "Unknown Artist" exactly like
+the frontend does for local display. The client-supplied duration, MIME
+type, file size, and publication status are never trusted — the server
+re-derives all of them, the same as the manual path.
+
+**Duplicate protection**: migration `005_device_music_import.sql` adds
+`content_hash`, `import_source`, and `original_file_name` to `songs`, plus a
+partial unique index on `(uploaded_by, content_hash)`. The server computes a
+streaming SHA-256 of the saved file; if this exact content was already
+imported by this same user, the newly-saved duplicate file is deleted and
+their existing song is returned — no second row is ever created. A
+different user importing the same audio is unaffected (the index is
+per-user, not global).
+
+Imported songs are always created with `is_published = false`, exactly like
+a manual upload — they appear in "My Uploads" (tagged `Imported`, showing
+their original filename), can be edited like any other draft, and are never
+exposed through the public catalog. Device-local playback of the original
+file remains available regardless of the imported copy's draft status; the
+two are independent copies (one on-device, one on the server).
+
+### Privacy and demo media
+
+The Device Music page states plainly, before any import: "Only import audio
+that you own or have permission to use," that scanning never uploads
+automatically, that RockStar cannot access folders that weren't selected,
+and that clearing the on-page library only removes browser references —
+never the original files on disk.
+
+For local testing without any commercial audio,
+`backend/scripts/setupDemoMusic.js` (`npm run demo:music`) synthesizes a
+handful of short, original WAV tracks locally (simple sine-wave
+scale/arpeggio patterns — no copied melodies, no network access) plus a
+generated SVG cover per track, into a gitignored `backend/demo-media/`
+directory, along with a `licenses.json` manifest recording each track's
+title, source ("generated"), and license statement. Nothing is downloaded
+from the internet by this script; a Mode B (downloading genuinely
+public-domain/CC0 audio with a recorded license) is documented as a future
+option but was **not** implemented, since verifying real third-party
+licensing terms isn't something this script can safely automate.
+
+### Known limitations
+
+- Directory-handle persistence (remembering a picked folder across visits
+  via IndexedDB, and re-querying/re-prompting for permission) is
+  implemented for the File System Access API path; the `webkitdirectory`
+  fallback cannot restore a `FileList` after a reload — the user re-selects
+  it, and the page says so.
+- A local, IndexedDB-only "Device Favorites" feature was intentionally left
+  out of this pass — it's independent of everything above and easy to add
+  later without touching the scanning/playback/import pipeline.
 
 ## Player & Personal Library Architecture (Phase 4)
 

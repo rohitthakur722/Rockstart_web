@@ -12,7 +12,7 @@ export function LikeButton({ song, size = "sm", className }) {
   const { isLiked, toggleLike } = usePersonalLibrary();
   const [pending, setPending] = useState(false);
 
-  if (!song || song.isPublished === false) return null;
+  if (!song || song.sourceType === "device" || song.isPublished === false) return null;
 
   const liked = isLiked(song.id);
   const dimensions = SIZES[size] || SIZES.sm;
