@@ -1,6 +1,11 @@
 import { Link } from "react-router-dom";
 import { Button } from "../components/common/Button";
-import { HeartIcon, LibraryIcon, MusicNoteIcon, PlaylistIcon } from "../components/common/icons";
+import {
+  HeartIcon,
+  LibraryIcon,
+  MusicNoteIcon,
+  PlaylistIcon,
+} from "../components/common/icons";
 import { useAuth } from "../hooks/useAuth";
 import { useAppVersion } from "../hooks/useAppVersion";
 import musicDashboardImage from "../assets/musicDashboardImage.jpeg";
@@ -19,7 +24,8 @@ const FEATURES = [
   {
     icon: HeartIcon,
     title: "Liked music, always close",
-    description: "Save the tracks you come back to and pick up right where you left off.",
+    description:
+      "Save the tracks you come back to and pick up right where you left off.",
   },
 ];
 
@@ -96,8 +102,12 @@ export default function LandingPage() {
                 />
               </div>
               <div className="space-y-1">
-                <p className="text-sm font-medium text-rockstar-text-primary">Now playing, wherever you left off</p>
-                <p className="text-xs text-rockstar-text-secondary">Catalog, uploads, playlists, and history - all live</p>
+                <p className="text-sm font-medium text-rockstar-text-primary">
+                  Now playing, wherever you left off
+                </p>
+                <p className="text-xs text-rockstar-text-secondary">
+                  Catalog, uploads, playlists, and history - all live
+                </p>
               </div>
             </div>
           </div>
@@ -113,8 +123,12 @@ export default function LandingPage() {
                 <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-rockstar-surface-elevated text-rockstar-tan">
                   <Icon width={18} height={18} aria-hidden="true" />
                 </span>
-                <h2 className="mb-1.5 text-base font-semibold text-rockstar-text-primary">{title}</h2>
-                <p className="text-sm text-rockstar-text-secondary">{description}</p>
+                <h2 className="mb-1.5 text-base font-semibold text-rockstar-text-primary">
+                  {title}
+                </h2>
+                <p className="text-sm text-rockstar-text-secondary">
+                  {description}
+                </p>
               </div>
             ))}
           </div>
