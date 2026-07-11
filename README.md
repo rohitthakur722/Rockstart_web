@@ -320,6 +320,25 @@ psql -d rockstar -f backend/database/migrations/004_admin_settings_release.sql
 `schema.sql` was also updated so a **fresh** database gets the complete
 current schema (Phases 1–5) in one pass.
 
+Two later, additive migrations extend `songs` further and are also folded
+into `schema.sql` for fresh installs:
+
+```bash
+psql -d rockstar -f backend/database/migrations/005_device_music_import.sql
+psql -d rockstar -f backend/database/migrations/006_demo_library.sql
+```
+
+- **`005_device_music_import.sql`** — adds `content_hash`, `import_source`,
+  `original_file_name` (see [RockStar import](#rockstar-import)).
+- **`006_demo_library.sql`** — adds `source_key VARCHAR(120)` with a partial
+  unique index (`WHERE source_key IS NOT NULL`), and extends the
+  `import_source` check constraint to allow `'demo_seed'` alongside the
+  existing `'manual'`/`'device_import'` values (see
+  [RockStar Demo Library](#rockstar-demo-library-seeded-catalog)). Both
+  migrations are idempotent (`ADD COLUMN IF NOT EXISTS`,
+  `CREATE INDEX IF NOT EXISTS`) and transactional — no existing row, table,
+  or user is ever touched.
+
 ### Supported formats & limits
 
 | | Formats | Max size (default) |
@@ -419,6 +438,9 @@ Frontend runs at `http://localhost:5173` and talks to the backend through
 | backend   | `npm run db:schema` | Apply `database/schema.sql`  |
 | backend   | `npm run db:seed`   | Apply `database/seed.sql`    |
 | backend   | `npm run demo:music` | Generate original demo WAV tracks + covers for testing Device Music, into gitignored `demo-media/` |
+| backend   | `npm run demo:seed`  | Seed the real, database-backed RockStar Demo Library |
+| backend   | `npm run demo:status` | Show whether the demo library is currently seeded |
+| backend   | `npm run demo:reset`  | Remove only `demo_seed` songs + their generated files |
 | frontend  | `npm run dev`    | Start Vite dev server            |
 | frontend  | `npm run build`  | Production build                 |
 
@@ -598,26 +620,57 @@ There is no automatic, background, or silent filesystem access:
 
 `deviceMusicScanner.js` owns feature detection, recursion, format
 filtering, fingerprinting, and metadata extraction — kept out of
-`DeviceLibraryPage.jsx` so the page stays a thin UI layer. Files are
-processed through a small dependency-free concurrency limiter
-(`runWithConcurrency`, 4 at a time) so scanning a large folder doesn't block
-the UI or parse hundreds of files at once. Each file gets a fast, local-only
-fingerprint (SHA-256 over its relative path + size + last-modified time,
-never its contents) for a stable id, plus a content-based SHA-256 hash
-(bounded to files under 100MB, computed with the same limited concurrency)
-for genuine duplicate detection across differently-named files. Cancellation
-is cooperative via `AbortController`, checked between files, and a user
-cancellation surfaces as a normal "cancelled" state, never an error.
+`DeviceLibraryPage.jsx` so the page stays a thin UI layer. The pipeline is
+genuinely **progressive**: `iterateDirectoryFiles` (File System Access) and
+`iterateFileListEntries` (`webkitdirectory`/multi-file input/drag-drop) are
+async generators that yield one file at a time — nothing ever collects a
+whole directory into an array before the UI sees anything, and large
+FileLists are walked in small batches with a tick yielded to the browser
+between them so a huge selection never blocks the main thread. As soon as a
+candidate audio file is found it gets an immediate placeholder row
+(`scanStatus: "reading_metadata"`, artist "Reading metadata…") that is
+updated **in place** once its metadata resolves — never appended as a
+second row.
 
-Each scanned file resolves to one status — `playable`, `unsupported`,
+Metadata extraction runs behind `createJobQueue`, a small dependency-free
+job queue that callers `push()` into incrementally as discovery continues
+(rather than handing over a complete array up front), bounded to 3
+concurrent jobs. One corrupt or unreadable file fails in isolation and never
+stops the rest of the scan. Both directory recursion/FileList processing
+*and* the metadata queue share **one single `AbortController`**, created
+once per scan in `DeviceLibraryProvider` — cancelling stops new discovery
+and new metadata work immediately; tracks already marked ready stay visible
+and playable. A user cancellation surfaces as a normal "cancelled" state,
+never an error.
+
+Each file gets a fast, local-only fingerprint (SHA-256 over its relative
+path + filename + size + last-modified time, never its contents) for a
+stable id and for duplicate detection — this fingerprint is the **only**
+hashing done during the initial scan. Full content hashing
+(`computeContentHash`) still exists, but only ever runs at explicit import
+time, where the backend is authoritative for duplicate detection; reading
+every file's full contents during the initial scan was removed entirely, so
+opening a folder with hundreds of tracks no longer stalls before anything
+appears.
+
+Explicit scan phases — `idle` → `requesting_permission` → `discovering` →
+`reading_metadata` → `ready` (or `cancelled`/`error`) — plus separate live
+counters (discovered files, audio candidates, queued-for-metadata,
+ready-to-play, unsupported, metadata errors, duplicates, processed, total
+size) drive the UI. Discovery shows an indeterminate progress indicator
+(never "0 of 0"); once discovery finishes and only metadata parsing remains,
+the UI switches to a determinate "processed of queued" bar.
+
+Each scanned file resolves to one status — `ready`, `unsupported`,
 `duplicate`, or `metadata_error` — determined by a two-layer format check:
 an extension/MIME allowlist (MP3, WAV, M4A, MP4/AAC, OGG, Opus, FLAC, WebM
 audio) followed by a real `audio.canPlayType()` probe, since format support
-genuinely varies by browser. Unsupported files stay visible in the scan
-summary but are excluded from the playable queue and from Play All/Shuffle
-All.
+genuinely varies by browser. A metadata parse failure never blocks playback
+when the browser can still decode the file — it falls back to the filename
+and stays playable. Unsupported files stay visible in the scan summary but
+are excluded from the playable queue and from Play All/Shuffle All.
 
-### Metadata and artwork
+### Metadata, caching, and artwork
 
 Metadata extraction uses the current, maintained **`music-metadata`**
 package (not the discontinued `-browser` fork) via its browser-compatible
@@ -637,17 +690,32 @@ bitrate, embedded picture) fall back, in order:
 
 None of this requires the user to type anything before local playback works.
 
-When a file has embedded artwork, the first suitable picture
-(`selectCover`) becomes a `Blob` → `URL.createObjectURL` — revoked when the
-track leaves the library (`clearLibrary`) or the provider unmounts. When
-there's no embedded artwork (true for most of this project's own generated
-demo tracks), **`GeneratedArtwork.jsx`** renders a deterministic, RockStar-
-styled cover (near-black gradient, warm tan/gold accent, one of a few
-restrained geometric motifs, the track's initials) computed from a
-non-cryptographic hash of a stable seed — the same track always renders the
-same design, and nothing is ever downloaded. This same fallback also now
-covers server songs, albums, and artists with no uploaded cover — see
-`SongRow`, `MusicCard`, and `PlayerArtwork`.
+**Metadata cache**: `deviceLibraryDb.js` adds an IndexedDB `metadataCache`
+store, keyed by the fast fingerprint (so any real change to the file — path,
+name, size, or timestamp — is automatically a cache miss; there's no
+separate staleness check to get wrong) plus a `cacheVersion` field that can
+be bumped to invalidate every cached entry at once if the stored shape ever
+changes. Only the safe display fields are cached — title, artist, album,
+track number, year, genres, duration, format, bitrate, and whether artwork
+was present — never the audio binary, an object URL, an absolute path, or
+any token/credential. A cache read or write failure is always treated as a
+nonfatal miss; the track is simply re-parsed.
+
+Embedded artwork is handled to avoid holding hundreds of images in memory at
+once: the extracted picture is stored as a plain `Blob` per track
+(`artworkBlobsRef`), and an actual `URL.createObjectURL` is only created the
+first time something renders that track (`getArtworkUrl`, called from
+`DeviceTrackRow`) — not eagerly for every scanned file. That object-URL
+cache is bounded (60 entries); once it's full, the least-recently-used URL
+is revoked to make room. Everything is revoked on `clearLibrary` and when
+the provider unmounts. When a file has no embedded artwork (true for most of
+this project's own generated demo tracks), **`GeneratedArtwork.jsx`** renders
+a deterministic, RockStar-styled cover (near-black gradient, warm tan/gold
+accent, one of a few restrained geometric motifs, the track's initials)
+computed from a non-cryptographic hash of a stable seed — the same track
+always renders the same design, and nothing is ever downloaded. This same
+fallback also covers server songs, albums, and artists with no uploaded
+cover — see `SongRow`, `MusicCard`, and `PlayerArtwork`.
 
 ### Local playback
 
@@ -714,20 +782,27 @@ two are independent copies (one on-device, one on the server).
 
 ### Privacy and demo media
 
-The Device Music page states plainly, before any import: "Only import audio
-that you own or have permission to use," that scanning never uploads
-automatically, that RockStar cannot access folders that weren't selected,
-and that clearing the on-page library only removes browser references —
-never the original files on disk.
+The Device Music page states plainly, before any scan and before any
+import: "RockStar can only read the folders and files that you select,"
+that scanning never uploads automatically, that RockStar cannot access
+folders that weren't selected, and that clearing the on-page library only
+removes browser references — never the original files on disk. **A website
+cannot silently scan the full device. The user selects a folder or files,
+and RockStar scans only that selected content.**
 
 For local testing without any commercial audio,
 `backend/scripts/setupDemoMusic.js` (`npm run demo:music`) synthesizes a
-handful of short, original WAV tracks locally (simple sine-wave
-scale/arpeggio patterns — no copied melodies, no network access) plus a
-generated SVG cover per track, into a gitignored `backend/demo-media/`
+handful of original WAV tracks locally — layered synthesis (bass, pad
+chords, arpeggios, soft percussion; see `utils/demoAudioSynth.js`, no copied
+melodies, no network access) — plus a generated SVG cover per track (see
+`utils/demoArtworkGenerator.js`), into a gitignored `backend/demo-media/`
 directory, along with a `licenses.json` manifest recording each track's
-title, source ("generated"), and license statement. Nothing is downloaded
-from the internet by this script; a Mode B (downloading genuinely
+title, source ("generated"), and license statement. This script writes
+files only — no database record is created, and a developer must manually
+select the generated files via "Select Audio Files" to try them as Device
+Music. For an **immediately-playable, database-backed** catalog instead —
+the RockStar Demo Library — see the next section. Nothing is downloaded
+from the internet by either script; a Mode B (downloading genuinely
 public-domain/CC0 audio with a recorded license) is documented as a future
 option but was **not** implemented, since verifying real third-party
 licensing terms isn't something this script can safely automate.
@@ -742,6 +817,58 @@ licensing terms isn't something this script can safely automate.
 - A local, IndexedDB-only "Device Favorites" feature was intentionally left
   out of this pass — it's independent of everything above and easy to add
   later without touching the scanning/playback/import pipeline.
+- Of the scan-status vocabulary this project's spec anticipated
+  (`ready`/`unsupported`/`metadata_partial`/`metadata_error`/`duplicate`/
+  `unavailable`), only the statuses the current extraction pipeline can
+  genuinely produce are implemented: `ready`, `unsupported`,
+  `metadata_error`, and `duplicate`. `metadata_partial` and `unavailable`
+  were not fabricated as distinct states since nothing in the current
+  pipeline meaningfully distinguishes them from `metadata_error`.
+
+## RockStar Demo Library (Seeded Catalog)
+
+Beyond the local-only Device Music demo files above, RockStar ships a
+**real, database-backed demo catalog** so the app feels complete
+immediately after setup — no manual folder selection required.
+
+```bash
+cd backend
+npm run demo:seed    # generate + insert ~10 original tracks, published
+npm run demo:status  # show whether the demo library is currently seeded
+npm run demo:reset    # remove ONLY demo_seed songs + their generated files
+```
+
+- **`backend/scripts/seedDemoLibrary.js`** synthesizes ~10 original
+  instrumental tracks (`utils/demoAudioSynth.js`) across three fictional
+  artists/albums (RockStar Sessions/*After Hours*, Velvet Circuit/*Golden
+  Frequency*, Northbound/*Open Roads*), generates a professional SVG cover
+  per track (`utils/demoArtworkGenerator.js`), writes them into the same
+  managed upload directories as any other song, and inserts real rows into
+  `artists`, `albums`, `genres`, and `songs` — reusing the existing
+  model-layer resolve-or-create helpers, not raw ad-hoc SQL.
+- **Idempotent**: each song has a stable `source_key` (e.g.
+  `demo:midnight-avenue`), enforced unique by a partial index
+  (migration `006_demo_library.sql`). Rerunning `demo:seed` skips songs,
+  artists, albums, and genres that already exist — never duplicates them.
+- **Safe by construction**: refuses to run at all when
+  `NODE_ENV=production` (checked live at call time, not cached at module
+  load); each song is seeded in its own transaction, so one failure never
+  rolls back songs already committed; if a song's database insert fails,
+  the audio/cover files just written for it are deleted immediately so no
+  orphaned files are left behind.
+- **`demo:reset` is scoped**: it deletes only rows with
+  `import_source = 'demo_seed'` and only the specific files those rows
+  reference (with path-containment validation before any delete) — it can
+  never touch manual uploads, device imports, other users' content,
+  playlists, or likes.
+- Seeded songs are ordinary published rows (`is_published = true`,
+  `import_source = 'demo_seed'`, `uploaded_by = NULL`) — they stream through
+  the existing Range-enabled endpoint and appear in Home, Library, search,
+  genre filtering, and admin moderation exactly like any other song, and
+  fully support likes, playlists, history, and play-count qualification
+  through the real production APIs. The catalog API surfaces
+  `sourceLabel: "RockStar Demo Library"` on these rows so the UI can show a
+  safe, human-readable source instead of a null uploader.
 
 ## Player & Personal Library Architecture (Phase 4)
 

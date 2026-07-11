@@ -31,6 +31,14 @@ const mapSong = (row, { viewer = null } = {}) => {
     updatedAt: row.updated_at,
   };
 
+  // A song's provenance is only sensitive for a real uploader's private
+  // details (file size, MIME type, original filename); "this came from the
+  // RockStar Demo Library" is never sensitive and is safe for any viewer —
+  // it has no uploader to protect (uploaded_by is NULL for every seeded row).
+  if (row.import_source === "demo_seed") {
+    song.sourceLabel = "RockStar Demo Library";
+  }
+
   if (includeOwnerFields) {
     song.fileSize = row.file_size !== null && row.file_size !== undefined ? String(row.file_size) : null;
     song.mimeType = row.mime_type || null;

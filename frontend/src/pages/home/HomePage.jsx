@@ -7,7 +7,7 @@ import { ErrorState } from "../../components/common/ErrorState";
 import { MusicCardSkeleton } from "../../components/common/Skeleton";
 import { MusicCard } from "../../components/music/MusicCard";
 import { SongRow } from "../../components/music/SongRow";
-import { SearchIcon, LibraryIcon } from "../../components/common/icons";
+import { SearchIcon, LibraryIcon, DeviceIcon } from "../../components/common/icons";
 import { Button } from "../../components/common/Button";
 import { useAuth } from "../../hooks/useAuth";
 import { usePlayer } from "../../hooks/usePlayer";
@@ -121,7 +121,20 @@ export default function HomePage() {
           actionLabel="Upload Music"
           actionAs={Link}
           actionTo="/library/upload"
-        />
+        >
+          <div className="mt-3 flex flex-wrap justify-center gap-3">
+            <Button as={Link} to="/library/device" variant="secondary" size="sm">
+              Browse Device Music
+            </Button>
+          </div>
+          {import.meta.env.DEV && (
+            <p className="mt-4 text-xs text-rockstar-text-secondary">
+              Developer tip: run <code className="rounded bg-rockstar-surface-elevated px-1 py-0.5">npm run demo:seed</code> in{" "}
+              <code className="rounded bg-rockstar-surface-elevated px-1 py-0.5">backend/</code> to populate the RockStar Demo
+              Library.
+            </p>
+          )}
+        </EmptyState>
       )}
 
       {state.status === "success" && !isCatalogEmpty && (
@@ -226,6 +239,20 @@ export default function HomePage() {
         </>
       )}
 
+      <section className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-rockstar-border bg-rockstar-surface p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-rockstar-surface-elevated text-rockstar-tan">
+            <DeviceIcon width={20} height={20} aria-hidden="true" />
+          </span>
+          <div>
+            <h3 className="text-base font-semibold text-rockstar-text-primary">Device Music</h3>
+            <p className="text-sm text-rockstar-text-secondary">Play music stored on your computer.</p>
+          </div>
+        </div>
+        <Button as={Link} to="/library/device" size="sm">
+          Add Music Folder
+        </Button>
+      </section>
     </div>
   );
 }

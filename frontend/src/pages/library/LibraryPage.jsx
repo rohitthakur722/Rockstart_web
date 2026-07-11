@@ -61,7 +61,10 @@ export default function LibraryPage() {
           <>
             <Button as={Link} to="/library/device" variant="secondary" size="sm">
               <DeviceIcon width={16} height={16} aria-hidden="true" />
-              Scan Device Music
+              Device Music
+            </Button>
+            <Button as={Link} to="/library/uploads" variant="secondary" size="sm">
+              My Uploads
             </Button>
             <Button as={Link} to="/library/upload" size="sm">
               Upload Music

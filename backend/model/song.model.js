@@ -19,7 +19,7 @@ const SELECT_COLUMNS = `
   s.id, s.title, s.artist_id, s.album_id, s.uploaded_by, s.audio_url, s.cover_url,
   s.duration_seconds, s.mime_type, s.audio_format, s.file_size, s.track_number,
   s.release_year, s.play_count, s.is_published, s.import_source, s.original_file_name,
-  s.created_at, s.updated_at,
+  s.source_key, s.created_at, s.updated_at,
   ar.name AS artist_name,
   al.title AS album_title, al.cover_url AS album_cover_url,
   COALESCE(
@@ -264,6 +264,8 @@ const create = async (
     contentHash = null,
     importSource = "manual",
     originalFileName = null,
+    sourceKey = null,
+    isPublished = false,
   },
   client
 ) => {
@@ -272,8 +274,8 @@ const create = async (
        title, artist_id, album_id, uploaded_by, audio_url, cover_url,
        duration_seconds, mime_type, audio_format, file_size, track_number,
        release_year, play_count, is_published, content_hash, import_source,
-       original_file_name
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, FALSE, $13, $14, $15)
+       original_file_name, source_key
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, $16, $13, $14, $15, $17)
      RETURNING id`,
     [
       title,
@@ -291,6 +293,8 @@ const create = async (
       contentHash,
       importSource,
       originalFileName,
+      isPublished,
+      sourceKey,
     ]
   );
   return result.rows[0].id;
@@ -303,6 +307,14 @@ const findByUploaderAndContentHash = async (uploadedBy, contentHash, client) => 
     "SELECT id FROM songs WHERE uploaded_by = $1 AND content_hash = $2",
     [uploadedBy, contentHash]
   );
+  return result.rows[0] || null;
+};
+
+// Demo-library idempotency guard (see migrations/006_demo_library.sql) — a
+// stable, human-chosen slug lets `npm run demo:seed` detect an already-
+// seeded song and skip it, rather than inserting a duplicate.
+const findBySourceKey = async (sourceKey, client) => {
+  const result = await runner(client).query("SELECT id FROM songs WHERE source_key = $1", [sourceKey]);
   return result.rows[0] || null;
 };
 
@@ -364,6 +376,7 @@ module.exports = {
   findPublishedByAlbum,
   create,
   findByUploaderAndContentHash,
+  findBySourceKey,
   updateMetadata,
   updateCoverUrl,
   updatePublication,

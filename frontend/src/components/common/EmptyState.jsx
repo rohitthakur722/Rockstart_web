@@ -1,6 +1,6 @@
 import { Button } from "./Button";
 
-export function EmptyState({ icon: Icon, title, description, actionLabel, onAction, actionTo, actionAs }) {
+export function EmptyState({ icon: Icon, title, description, actionLabel, onAction, actionTo, actionAs, children }) {
   return (
     <div className="flex flex-col items-center gap-4 rounded-[var(--radius-card)] border border-dashed border-rockstar-border bg-rockstar-surface/40 px-6 py-14 text-center">
       {Icon && (
@@ -17,6 +17,7 @@ export function EmptyState({ icon: Icon, title, description, actionLabel, onActi
           {actionLabel}
         </Button>
       )}
+      {children}
     </div>
   );
 }

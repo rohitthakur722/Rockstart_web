@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Button } from "../../components/common/Button";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
@@ -14,10 +15,11 @@ import { formatFileSize } from "../../utils/fileSize";
 import { cn } from "../../utils/cn";
 
 const AUDIO_ACCEPT = "audio/*,.mp3,.wav,.m4a,.mp4,.ogg,.opus,.flac,.aac,.webm";
+const FORMAT_NOTE = "Supports MP3, WAV, M4A, OGG, Opus, FLAC, AAC, and WebM — support depends on the current browser and codec.";
 
 const STATUS_FILTERS = [
   { value: "all", label: "All" },
-  { value: "playable", label: "Playable" },
+  { value: "ready", label: "Ready to play" },
   { value: "unsupported", label: "Unsupported" },
   { value: "duplicate", label: "Duplicates" },
 ];
@@ -25,19 +27,25 @@ const STATUS_FILTERS = [
 const SORT_OPTIONS = [
   { value: "title", label: "Title" },
   { value: "artist", label: "Artist" },
+  { value: "album", label: "Album" },
+  { value: "folder", label: "Folder" },
   { value: "duration", label: "Duration" },
-  { value: "size", label: "File size" },
+  { value: "discovered", label: "Recently discovered" },
 ];
+
+const PAGE_SIZE = 100;
 
 export default function DeviceLibraryPage() {
   const device = useDeviceLibrary();
   const { playQueue } = usePlayer();
+  const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sort, setSort] = useState("title");
   const [dragActive, setDragActive] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const folderInputRef = useRef(null);
   const filesInputRef = useRef(null);
@@ -48,6 +56,19 @@ export default function DeviceLibraryPage() {
     // handle is a read-only permission *query*, never an automatic scan.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Reset pagination when the filters change — adjusted during render (React's
+  // recommended pattern for "derived state that resets on a prop/param
+  // change") rather than in an Effect, which would cause an extra render pass.
+  const filterKey = `${search}|${statusFilter}|${sort}`;
+  const [syncedFilterKey, setSyncedFilterKey] = useState(filterKey);
+  if (filterKey !== syncedFilterKey) {
+    setSyncedFilterKey(filterKey);
+    setVisibleCount(PAGE_SIZE);
+  }
+
+  const folderOf = (track) =>
+    track.relativePath.includes("/") ? track.relativePath.slice(0, track.relativePath.lastIndexOf("/")) : "";
 
   const filteredTracks = useMemo(() => {
     let list = device.tracks;
@@ -68,19 +89,25 @@ export default function DeviceLibraryPage() {
       case "artist":
         sorted.sort((a, b) => (a.artist || "").localeCompare(b.artist || ""));
         break;
+      case "album":
+        sorted.sort((a, b) => (a.album || "").localeCompare(b.album || ""));
+        break;
+      case "folder":
+        sorted.sort((a, b) => folderOf(a).localeCompare(folderOf(b)));
+        break;
       case "duration":
         sorted.sort((a, b) => (b.durationSeconds || 0) - (a.durationSeconds || 0));
         break;
-      case "size":
-        sorted.sort((a, b) => (b.sizeBytes || 0) - (a.sizeBytes || 0));
-        break;
+      case "discovered":
+        break; // tracks are already in discovery order
       default:
         sorted.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
     }
     return sorted;
   }, [device.tracks, statusFilter, search, sort]);
 
-  const playableFiltered = useMemo(() => filteredTracks.filter((t) => t.scanStatus === "playable"), [filteredTracks]);
+  const pagedTracks = filteredTracks.slice(0, visibleCount);
+  const playableFiltered = useMemo(() => filteredTracks.filter((t) => t.scanStatus === "ready"), [filteredTracks]);
 
   const buildPlayableQueue = (startTrack) => {
     const withUrls = playableFiltered.map((t) => ({ ...t, localPlaybackUrl: device.getPlaybackUrl(t) }));
@@ -128,32 +155,34 @@ export default function DeviceLibraryPage() {
     .filter((t) => device.selectedIds.has(t.id))
     .reduce((sum, t) => sum + (t.sizeBytes || 0), 0);
 
-  const isScanning = device.scanState === "scanning";
+  const isDiscovering = device.scanPhase === "discovering";
+  const isReadingMetadata = device.scanPhase === "reading_metadata";
+  const isScanning = isDiscovering || isReadingMetadata || device.scanPhase === "requesting_permission";
+  const hasStarted = device.scanPhase !== "idle";
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Device Music"
-        description="Play music straight from your device - nothing is uploaded unless you choose to import it."
+        title="Your music, directly from your device"
+        description="Choose a music folder or select audio files. RockStar plays them locally in your browser. Nothing is uploaded unless you explicitly choose Import."
       />
 
       <div className="rounded-[var(--radius-card)] border border-rockstar-border bg-rockstar-surface p-4">
         <p className="text-sm text-rockstar-text-secondary">
-          RockStar can only scan files and folders that you choose. Nothing on your device is accessed until you
-          press one of the buttons below.
+          RockStar can only read the folders and files that you select.
         </p>
 
         <div className="mt-4 flex flex-wrap gap-3">
           {device.isDirectoryPickerSupported ? (
             <Button size="sm" onClick={device.scanFromDirectoryPicker} disabled={isScanning}>
               <FolderIcon width={16} height={16} aria-hidden="true" />
-              Scan Music Folder
+              Add Music Folder
             </Button>
           ) : (
             <>
               <Button size="sm" variant="secondary" onClick={() => folderInputRef.current?.click()} disabled={isScanning}>
                 <FolderIcon width={16} height={16} aria-hidden="true" />
-                Select Folder
+                Add Music Folder
               </Button>
               <input
                 ref={folderInputRef}
@@ -182,6 +211,10 @@ export default function DeviceLibraryPage() {
             onChange={handleFilesInputChange}
           />
 
+          <Button size="sm" variant="ghost" onClick={() => navigate("/")}>
+            Browse Demo Library
+          </Button>
+
           {device.directoryName && !isScanning && (
             <Button size="sm" variant="ghost" onClick={device.rescan}>
               <RefreshIcon width={16} height={16} aria-hidden="true" />
@@ -198,14 +231,14 @@ export default function DeviceLibraryPage() {
 
           {isScanning && (
             <Button size="sm" variant="ghost" onClick={device.cancelScan}>
-              Cancel scan
+              Cancel Scan
             </Button>
           )}
         </div>
 
         {!device.isDirectoryPickerSupported && (
           <p className="mt-3 text-xs text-rockstar-text-secondary">
-            Your browser doesn't support the folder picker (this is normal in Firefox and Safari) - use "Select
+            Your browser doesn't support the folder picker (this is normal in Firefox and Safari) — use "Add Music
             Folder" or "Select Audio Files" instead. You'll need to re-select the folder after a page refresh.
           </p>
         )}
@@ -241,42 +274,72 @@ export default function DeviceLibraryPage() {
           Or drag and drop audio files here
         </div>
 
-        <p className="mt-3 text-xs text-rockstar-text-secondary">
-          Only import audio that you own or have permission to use. Scanning never uploads anything automatically -
+        <p className="mt-3 text-xs text-rockstar-text-secondary">{FORMAT_NOTE}</p>
+        <p className="mt-2 text-xs text-rockstar-text-secondary">
+          Only import audio that you own or have permission to use. Scanning never uploads anything automatically —
           device songs stay local until you press Import. Clearing Device Library only removes browser references,
           never the original files on your device.
         </p>
       </div>
 
       {isScanning && (
-        <div role="status" aria-live="polite" className="space-y-2 rounded-[var(--radius-card)] border border-rockstar-border bg-rockstar-surface p-4">
+        <div
+          role="status"
+          aria-live="polite"
+          className="space-y-3 rounded-[var(--radius-card)] border border-rockstar-border bg-rockstar-surface p-4"
+        >
           <div className="flex items-center justify-between text-xs text-rockstar-text-secondary">
             <span>
-              Scanning… {device.scanProgress.processed} of {device.scanProgress.total}
+              {isDiscovering && `Scanning "${device.directoryName || "your selection"}"…`}
+              {isReadingMetadata && "Reading metadata for the remaining tracks…"}
+              {device.scanPhase === "requesting_permission" && "Waiting for folder access…"}
             </span>
             <LoadingSpinner size="sm" label="Scanning" />
           </div>
-          <progress
-            className="h-1.5 w-full [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-rockstar-surface-elevated [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-rockstar-tan"
-            value={device.scanProgress.processed}
-            max={Math.max(device.scanProgress.total, 1)}
-          />
+
+          {isDiscovering ? (
+            <progress className="h-1.5 w-full animate-pulse [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-rockstar-surface-elevated" />
+          ) : (
+            <progress
+              className="h-1.5 w-full [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-rockstar-surface-elevated [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-rockstar-tan"
+              value={device.counters.processed}
+              max={Math.max(device.counters.queuedForMetadata, 1)}
+            />
+          )}
+
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+            {[
+              ["Discovered", device.counters.discoveredFiles],
+              ["Music found", device.counters.audioCandidates],
+              ["Ready to play", device.counters.readyToPlay],
+              ["Reading metadata", Math.max(device.counters.queuedForMetadata - device.counters.processed, 0)],
+              ["Unsupported", device.counters.unsupported],
+              ["Duplicates", device.counters.duplicates],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-[var(--radius-field)] border border-rockstar-border bg-rockstar-background p-2 text-center">
+                <p className="text-[11px] text-rockstar-text-secondary">{label}</p>
+                <p className="text-sm font-semibold text-rockstar-text-primary">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-xs text-rockstar-text-secondary">Songs will appear below as soon as they are ready.</p>
         </div>
       )}
 
-      {device.scanState === "cancelled" && (
+      {device.scanPhase === "cancelled" && (
         <p role="status" className="text-sm text-rockstar-text-secondary">
           Scan cancelled. {device.tracks.length > 0 ? "Tracks found so far are shown below." : ""}
         </p>
       )}
 
-      {device.scanState === "error" && <ErrorState title="Scan failed" message={device.scanError} onRetry={device.rescan} />}
+      {device.scanPhase === "error" && <ErrorState title="Scan failed" message={device.scanError} onRetry={device.rescan} />}
 
-      {device.tracks.length > 0 && (
+      {!isScanning && device.tracks.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {[
             ["Inspected", device.summary.inspected],
-            ["Playable", device.summary.playable],
+            ["Ready to play", device.summary.playable],
             ["Unsupported", device.summary.unsupported],
             ["Duplicates", device.summary.duplicates],
             ["Total size", formatFileSize(device.summary.totalSizeBytes)],
@@ -289,10 +352,10 @@ export default function DeviceLibraryPage() {
         </div>
       )}
 
-      {device.tracks.length === 0 && !isScanning && device.scanState !== "error" && (
+      {!hasStarted && device.tracks.length === 0 && (
         <EmptyState
           icon={DeviceIcon}
-          title="No device music scanned yet"
+          title="No device music yet"
           description="Choose a folder or select files above to browse and play your local music - nothing is uploaded until you explicitly import it."
         />
       )}
@@ -368,16 +431,26 @@ export default function DeviceLibraryPage() {
             {filteredTracks.length === 0 ? (
               <p className="py-8 text-center text-sm text-rockstar-text-secondary">No tracks match your filters.</p>
             ) : (
-              filteredTracks.map((track) => (
-                <DeviceTrackRow
-                  key={track.id}
-                  track={track}
-                  selected={device.selectedIds.has(track.id)}
-                  onToggleSelect={device.toggleTrackSelection}
-                  onRetryImport={device.retryImport}
-                  onPlay={handlePlayTrack}
-                />
-              ))
+              <>
+                {pagedTracks.map((track) => (
+                  <DeviceTrackRow
+                    key={track.id}
+                    track={track}
+                    selected={device.selectedIds.has(track.id)}
+                    onToggleSelect={device.toggleTrackSelection}
+                    onRetryImport={device.retryImport}
+                    onPlay={handlePlayTrack}
+                    getArtworkUrl={device.getArtworkUrl}
+                  />
+                ))}
+                {filteredTracks.length > pagedTracks.length && (
+                  <div className="flex justify-center pt-3">
+                    <Button size="sm" variant="secondary" onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}>
+                      Load More ({filteredTracks.length - pagedTracks.length} remaining)
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </>

@@ -7,7 +7,8 @@ import { usePlayer } from "../../hooks/usePlayer";
 import { cn } from "../../utils/cn";
 
 const STATUS_LABEL = {
-  playable: null,
+  ready: null,
+  reading_metadata: "Reading metadata…",
   unsupported: "Unsupported",
   duplicate: "Duplicate",
   metadata_error: "Metadata error",
@@ -22,7 +23,7 @@ const IMPORT_STATUS_LABEL = {
   failed: "Import failed",
 };
 
-export function DeviceTrackRow({ track, selected, onToggleSelect, onRetryImport, onPlay }) {
+export function DeviceTrackRow({ track, selected, onToggleSelect, onRetryImport, onPlay, getArtworkUrl }) {
   const { currentSong, isPlaying, togglePlayPause } = usePlayer();
 
   const isCurrent = currentSong?.id === track.id;
@@ -32,7 +33,9 @@ export function DeviceTrackRow({ track, selected, onToggleSelect, onRetryImport,
     if (isCurrent) togglePlayPause();
     else onPlay?.(track);
   };
-  const canPlay = track.scanStatus === "playable" || track.scanStatus === "metadata_error";
+  const canPlay = track.scanStatus === "ready" || track.scanStatus === "metadata_error";
+  const isReadingMetadata = track.scanStatus === "reading_metadata";
+  const artworkUrl = getArtworkUrl?.(track.id) ?? null;
   const folder = track.relativePath.includes("/")
     ? track.relativePath.slice(0, track.relativePath.lastIndexOf("/"))
     : null;
@@ -60,8 +63,8 @@ export function DeviceTrackRow({ track, selected, onToggleSelect, onRetryImport,
       )}
 
       <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-md bg-rockstar-atmosphere">
-        {track.artworkUrl ? (
-          <img src={track.artworkUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+        {artworkUrl ? (
+          <img src={artworkUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
         ) : (
           <GeneratedArtwork seed={track.id} title={track.title} artist={track.artist} rounded={false} />
         )}
@@ -84,6 +87,9 @@ export function DeviceTrackRow({ track, selected, onToggleSelect, onRetryImport,
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5 truncate text-sm font-medium text-rockstar-text-primary">
           {track.title}
+          <span className="hidden shrink-0 rounded-full border border-rockstar-border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-rockstar-text-secondary sm:inline-flex">
+            Device
+          </span>
         </span>
         <span className="block truncate text-xs text-rockstar-text-secondary">
           {track.artist}
@@ -92,7 +98,9 @@ export function DeviceTrackRow({ track, selected, onToggleSelect, onRetryImport,
         </span>
       </span>
 
-      {STATUS_LABEL[track.scanStatus] && (
+      {isReadingMetadata && <LoadingSpinner size="sm" label="Reading metadata" />}
+
+      {!isReadingMetadata && STATUS_LABEL[track.scanStatus] && (
         <span
           className={cn(
             "hidden shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium sm:inline-flex",
